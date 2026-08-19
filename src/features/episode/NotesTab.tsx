@@ -4,6 +4,7 @@ import type { Episode } from '../../shared/types'
 import { useCaptureStore } from '../../shared/store/capture'
 import { NoteItem } from './NoteItem'
 import { EmptyState } from '../../shared/components/EmptyState'
+import { InsetGroup } from '../../shared/components/InsetGroup'
 
 export function NotesTab({ episode }: { episode: Episode }) {
   const navigate = useNavigate()
@@ -22,10 +23,12 @@ export function NotesTab({ episode }: { episode: Episode }) {
           detail="听节目时冒出的想法，随时用底部「记录」记下来。它们会按时间排在这里，并被 AI 整理进这期节目。"
         />
       ) : (
-        <div>
-          {episode.notes.map((note) => (
-            <NoteItem key={note.id} note={note} />
-          ))}
+        <div className="px-4 pt-4">
+          <InsetGroup>
+            {episode.notes.map((note) => (
+              <NoteItem key={note.id} note={note} />
+            ))}
+          </InsetGroup>
         </div>
       )}
 

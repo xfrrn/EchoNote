@@ -12,7 +12,7 @@ export function SearchResultRow({ item, query }: { item: SearchResultItem; query
   return (
     <Link
       to={`/episode/${item.episodeId}?tab=${tabForKind(item.kind)}`}
-      className="block px-4 py-4 transition-colors duration-fast ease-ios active:bg-subtle"
+      className="block px-3.5 py-3 transition-colors duration-fast ease-ios active:bg-subtle"
     >
       <p className="text-caption text-ink-secondary">
         {item.showTitle}

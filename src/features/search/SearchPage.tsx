@@ -3,6 +3,7 @@ import { Search, X } from 'lucide-react'
 import { useSearchResults } from '../../shared/mock/episodes'
 import { SectionLabel } from '../../shared/components/SectionLabel'
 import { EmptyState } from '../../shared/components/EmptyState'
+import { InsetGroup } from '../../shared/components/InsetGroup'
 import { SearchResultRow } from './SearchResultRow'
 
 const groupLabels = {
@@ -61,14 +62,16 @@ export function SearchPage() {
       ) : groups.length === 0 ? (
         <EmptyState title={`没有找到与「${query.trim()}」相关的内容`} detail="换一个更短的关键词试试，比如 FDE、Agent、转录。" />
       ) : (
-        <div>
+        <div className="pb-4">
           {groups.map((group) => (
             <section key={group.kind} aria-label={groupLabels[group.kind]}>
               <SectionLabel className="pt-5">{groupLabels[group.kind]}</SectionLabel>
-              <div className="divide-y divide-hairline">
-                {group.items.map((item, index) => (
-                  <SearchResultRow key={`${item.kind}-${item.meta}-${index}`} item={item} query={query} />
-                ))}
+              <div className="px-4">
+                <InsetGroup>
+                  {group.items.map((item, index) => (
+                    <SearchResultRow key={`${item.kind}-${item.meta}-${index}`} item={item} query={query} />
+                  ))}
+                </InsetGroup>
               </div>
             </section>
           ))}
