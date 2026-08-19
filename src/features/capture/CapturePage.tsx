@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useCaptureStore, currentTimeLabel } from '../../shared/store/capture'
 import { useVisualViewportHeight } from '../../shared/hooks/useVisualViewportHeight'
 import { useEpisode } from '../../shared/mock/episodes'
+import { ShowCover } from '../../shared/components/ShowCover'
+import { Waveform } from '../../shared/components/Waveform'
 
 export function CapturePage() {
   const navigate = useNavigate()
@@ -74,11 +76,17 @@ export function CapturePage() {
           </button>
         </header>
 
-        <div className="px-4 pt-3">
-          <p className="text-headline text-ink">{episode?.showTitle ?? '硅谷101'}</p>
-          <p className="mt-1 text-caption text-ink-tertiary">
-            {contextCode || '新想法'} · 正在记录
-          </p>
+        <div className="flex items-center gap-3 px-4 pt-3">
+          {episode ? (
+            <ShowCover showTitle={episode.showTitle} glyph={episode.coverLabel} size="sm" />
+          ) : null}
+          <div className="min-w-0">
+            <p className="text-headline text-ink">{episode?.showTitle ?? '随手记录'}</p>
+            <p className="mt-0.5 flex items-center gap-1.5 text-caption text-ink-tertiary">
+              <Waveform bars={10} seed="capture" animated className="h-3 w-10 text-accent" />
+              {contextCode || '新想法'} · 正在记录
+            </p>
+          </div>
         </div>
 
         <textarea
@@ -96,7 +104,7 @@ export function CapturePage() {
           aria-label="记录想法"
           placeholder="记录此刻的想法…"
           style={textareaMinHeight ? { minHeight: `${textareaMinHeight}px` } : undefined}
-          className="capture-textarea-min w-full flex-1 resize-none bg-transparent px-4 pt-6 text-body text-ink placeholder:text-ink-tertiary focus:outline-none"
+          className="capture-textarea-min w-full flex-1 resize-none bg-transparent px-4 pt-5 font-serif text-body-serif text-ink placeholder:font-sans placeholder:text-ink-tertiary focus:outline-none"
         />
       </div>
     </div>

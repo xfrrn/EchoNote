@@ -2,6 +2,7 @@ import type { AiSummary, Episode, Note, SearchResultItem, Speaker, TranscriptSeg
 import { baseTranscriptSegments, fourSpeakerExtraSegments } from './transcript'
 import { useTestMode, type TestModeState } from '../store/test-mode'
 import { useCaptureStore } from '../store/capture'
+import { useLibraryStore } from '../store/library'
 
 export const statusLabels: Record<Episode['status'], string> = {
   transcribed: '已转录',
@@ -191,11 +192,38 @@ function buildEpisodes(state: TestModeState, extraNotes: Record<string, Note[]>)
 export function useEpisodes(): Episode[] {
   const state = useTestMode()
   const extraNotes = useCaptureStore((s) => s.extraNotes)
-  return buildEpisodes(state, extraNotes)
+  const imported = useLibraryStore((s) => s.imported)
+  return [...imported, ...buildEpisodes(state, extraNotes)]
 }
 
 export function getEpisodesSnapshot(): Episode[] {
-  return buildEpisodes(useTestMode.getState(), useCaptureStore.getState().extraNotes)
+  return [
+    ...useLibraryStore.getState().imported,
+    ...buildEpisodes(useTestMode.getState(), useCaptureStore.getState().extraNotes)
+  ]
+}
+
+/** 由导入链接构造一档「转录中」的新节目（Mock，不连接真实服务）。 */
+export function buildImportedEpisode(url: string): Episode {
+  const lower = url.toLowerCase()
+  const source = lower.includes('xiaoyuzhou') || lower.includes('xiaooyuzhou')
+    ? '小宇宙'
+    : lower.includes('apple')
+      ? 'Apple Podcasts'
+      : '导入的节目'
+  return {
+    id: `imp-${Date.now()}`,
+    showTitle: source,
+    episodeTitle: '新导入的节目',
+    episodeTitleLong: '新导入的节目',
+    durationMin: 0,
+    status: 'transcribing',
+    recordedLabel: '刚刚',
+    notes: [],
+    coverLabel: '新',
+    transcriptAvailable: false,
+    aiAvailable: false
+  }
 }
 
 export function getEpisode(id: string): Episode | undefined {
@@ -221,6 +249,21 @@ function timestampToSeconds(timestamp: string): number {
 
 export function getSpeaker(speakerId: Speaker['id']): Speaker {
   return speakers.find((speaker) => speaker.id === speakerId) ?? speakers[0]
+}
+
+/**
+ * 每位说话人一个克制的识别色（仅用于名字前的小色点）。
+ * 选用中间调，保证在暖纸与暗色两种背景下都清晰、不刺眼。
+ */
+const speakerTones: Record<Speaker['id'], string> = {
+  host: '#c2502e',
+  peng: '#3e7a6e',
+  guest: '#a8763e',
+  audience: '#7d776c'
+}
+
+export function speakerTone(speakerId: Speaker['id']): string {
+  return speakerTones[speakerId] ?? '#7d776c'
 }
 
 export function useTranscript(episodeId: string): TranscriptSegment[] {

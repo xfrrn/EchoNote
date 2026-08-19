@@ -19,12 +19,7 @@
     overflow-x: clip;
     background: var(--bg-primary);
     color: var(--text-primary);
-    font-family:
-      system-ui,
-      -apple-system,
-      BlinkMacSystemFont,
-      "Segoe UI",
-      sans-serif;
+    font-family: var(--font-sans);
     font-size: 17px;
     line-height: 1.65;
     overflow-wrap: break-word;
@@ -32,6 +27,14 @@
     -moz-osx-font-smoothing: grayscale;
     -webkit-tap-highlight-color: transparent;
     overscroll-behavior-y: none;
+  }
+
+  /* 衬线内容字：让中文宋体与西文衬线在阅读场景下自然混排 */
+  .font-content,
+  .font-serif {
+    font-family: var(--font-content);
+    font-feature-settings: 'halt' 0;
+    text-rendering: optimizeLegibility;
   }
 
   textarea {

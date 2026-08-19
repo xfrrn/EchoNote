@@ -3,6 +3,7 @@ import { ChevronRight } from 'lucide-react'
 import { useTestMode, type NotesDensity, type SpeakerCount, type TestModeState } from '../../shared/store/test-mode'
 import { SegmentedControl, type SegmentedOption } from '../../shared/components/SegmentedControl'
 import { SectionLabel } from '../../shared/components/SectionLabel'
+import { EchoMark } from '../../shared/components/EchoMark'
 import { statusLabels } from '../../shared/mock/episodes'
 
 interface SettingRowProps {
@@ -54,6 +55,17 @@ export function MinePage() {
       <header className="px-4 pt-4">
         <h1 className="text-large-title text-ink">我的</h1>
       </header>
+
+      {/* 品牌区：回声标 + slogan */}
+      <div className="mx-4 mt-4 flex items-center gap-3.5 rounded-lg bg-surface px-4 py-4">
+        <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent-soft text-accent">
+          <EchoMark size={28} />
+        </span>
+        <div className="min-w-0">
+          <p className="text-headline text-ink">EchoNote</p>
+          <p className="mt-0.5 text-caption text-ink-secondary">把听过即忘的声音，变成能留下的知识。</p>
+        </div>
+      </div>
 
       <SectionLabel>外观</SectionLabel>
       <div className="divide-y divide-hairline">

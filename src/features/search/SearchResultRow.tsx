@@ -21,7 +21,7 @@ export function SearchResultRow({ item, query }: { item: SearchResultItem; query
         </span>
         <span className="text-ink-tertiary">{item.meta}</span>
       </p>
-      <p className="mt-1 text-body text-ink">
+      <p className="mt-1.5 font-serif text-body-serif text-ink">
         <HighlightedText text={item.snippet} query={query} />
       </p>
     </Link>

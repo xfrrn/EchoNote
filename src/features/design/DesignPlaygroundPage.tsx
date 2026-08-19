@@ -9,6 +9,9 @@ import { NoteItem } from '../episode/NoteItem'
 import { TranscriptSegmentItem } from '../episode/TranscriptSegmentItem'
 import { SearchResultRow } from '../search/SearchResultRow'
 import { BottomNav } from '../../app/layout/BottomNav'
+import { ShowCover } from '../../shared/components/ShowCover'
+import { EchoMark } from '../../shared/components/EchoMark'
+import { Waveform } from '../../shared/components/Waveform'
 import { getEpisodesSnapshot, getSpeaker } from '../../shared/mock/episodes'
 import type { Note, SearchResultItem, TranscriptSegment } from '../../shared/types'
 
@@ -86,6 +89,103 @@ export function DesignPlaygroundPage() {
           </p>
         </div>
 
+        <PlaygroundTitle>Brand / 母题</PlaygroundTitle>
+        <div className="mt-2 flex items-center gap-6 px-4 py-2">
+          <EchoMark size={32} className="text-accent" />
+          <EchoMark size={32} className="text-accent" animated />
+          <Waveform bars={24} seed="playground" className="h-6 w-32 text-ink-secondary" />
+          <Waveform bars={24} seed="playground" animated className="h-6 w-32 text-accent" />
+        </div>
+
+        <PlaygroundTitle>Covers / 节目封面</PlaygroundTitle>
+        <div className="mt-2 flex items-end gap-3 px-4">
+          {getEpisodesSnapshot()
+            .slice(0, 4)
+            .map((ep) => (
+              <div key={ep.id} className="flex flex-col items-center gap-1.5">
+                <ShowCover showTitle={ep.showTitle} glyph={ep.coverLabel} size="lg" />
+                <span className="max-w-16 truncate text-caption text-ink-tertiary">{ep.showTitle}</span>
+              </div>
+            ))}
+        </div>
+
+        <PlaygroundTitle>Brand · 回声母题与封面</PlaygroundTitle>
+        <div className="mt-2 px-4">
+          <div className="flex items-center gap-4">
+            <EchoMark size={32} className="text-accent" />
+            <EchoMark size={32} animated className="text-accent" />
+            <Waveform bars={22} seed="playground" className="h-6 flex-1 text-ink-tertiary" />
+            <Waveform bars={22} seed="playground" animated className="h-6 flex-1 text-accent" />
+          </div>
+          <div className="mt-4 flex items-end gap-3">
+            <ShowCover showTitle="硅谷101" glyph="硅" size="xl" />
+            <ShowCover showTitle="原点 The Origin" glyph="原" size="lg" />
+            <ShowCover showTitle="声动早咖啡" glyph="声" size="md" />
+            <ShowCover showTitle="晚点聊 LateTalk" glyph="晚" size="sm" />
+          </div>
+          <p className="mt-2 text-caption text-ink-tertiary">
+            封面为程序化生成：暖调双色素场 + 衬线大字 + 声波 + 纸纹；未知节目按标题哈希取同色系。
+          </p>
+        </div>
+
+        <PlaygroundTitle>Brand / 封面与母题</PlaygroundTitle>
+        <div className="mt-2 flex items-center gap-4 px-4 py-2">
+          <ShowCover showTitle="硅谷101" glyph="硅" size="xl" />
+          <ShowCover showTitle="原点 The Origin" glyph="原" size="lg" />
+          <ShowCover showTitle="声动早咖啡" glyph="声" size="md" />
+          <ShowCover showTitle="晚点聊 LateTalk" glyph="晚" size="sm" />
+        </div>
+        <div className="mt-2 flex items-center gap-5 px-4 py-2">
+          <span className="text-accent"><EchoMark size={30} /></span>
+          <span className="text-accent"><EchoMark size={30} animated /></span>
+          <Waveform bars={24} seed="playground" className="h-6 w-40 text-ink-secondary" />
+          <Waveform bars={24} seed="playground-live" animated className="h-6 w-40 text-accent" />
+        </div>
+        <p className="px-4 pt-1 text-caption text-ink-tertiary">
+          回声标（静态 / 扩散）与声波纹理（静态 / 起伏）。
+        </p>
+
+        <PlaygroundTitle>Brand / Covers</PlaygroundTitle>
+        <div className="mt-2 flex items-center gap-4 px-4 py-2">
+          <span className="text-accent">
+            <EchoMark size={34} />
+          </span>
+          <span className="text-accent">
+            <EchoMark size={34} animated />
+          </span>
+          <Waveform bars={22} seed="playground" className="h-6 w-32 text-ink-tertiary" />
+          <Waveform bars={22} seed="playground-live" animated className="h-6 w-32 text-accent" />
+        </div>
+        <div className="mt-2 flex items-center gap-3 px-4">
+          {getEpisodesSnapshot()
+            .slice(0, 4)
+            .map((ep) => (
+              <ShowCover key={ep.id} showTitle={ep.showTitle} glyph={ep.coverLabel} size="lg" />
+            ))}
+        </div>
+        <p className="px-4 pt-2 text-caption text-ink-tertiary">
+          回声母题（静态 / 扩散）· 声波纹理（静态 / 起伏）· 四档节目封面同源不同色相。
+        </p>
+
+        <PlaygroundTitle>品牌 / 封面</PlaygroundTitle>
+        <div className="mt-2 flex items-center gap-4 px-4">
+          <ShowCover showTitle="硅谷101" glyph="硅" size="lg" />
+          <ShowCover showTitle="原点 The Origin" glyph="原" size="lg" />
+          <ShowCover showTitle="声动早咖啡" glyph="声" size="lg" />
+          <ShowCover showTitle="晚点聊 LateTalk" glyph="晚" size="lg" />
+        </div>
+        <div className="mt-4 flex items-center gap-6 px-4">
+          <span className="flex items-center gap-2 text-accent">
+            <EchoMark size={28} />
+            <EchoMark size={28} animated />
+          </span>
+          <Waveform bars={24} seed="playground" className="h-6 w-32 text-ink-secondary" />
+          <Waveform bars={24} seed="playground" animated className="h-6 w-32 text-accent" />
+        </div>
+        <p className="mt-2 px-4 text-caption text-ink-tertiary">
+          回声母题（涟漪 / 声波）与生成式封面：暖调双色素场 + 衬线大字 + 纸纹。
+        </p>
+
         <PlaygroundTitle>Typography</PlaygroundTitle>
         <div className="mt-2 divide-y divide-hairline">
           {typeScale.map((item) => (
@@ -94,6 +194,10 @@ export function DesignPlaygroundPage() {
               <span className={item.className}>长文本阅读 Long-form reading</span>
             </div>
           ))}
+          <div className="flex items-baseline justify-between gap-4 px-4 py-3">
+            <span className="text-caption text-ink-tertiary">Body Serif</span>
+            <span className="font-serif text-body-serif">长文本阅读 Long-form</span>
+          </div>
         </div>
 
         <PlaygroundTitle>Colors</PlaygroundTitle>
@@ -168,10 +272,14 @@ export function DesignPlaygroundPage() {
         <PlaygroundTitle>Transcript Segment</PlaygroundTitle>
         <div className="mt-2">
           <p className="px-4 pb-2 text-caption text-ink-tertiary">
-            当前 Speaker：{speaker.name}；Timestamp 13px / Tertiary，正文 17px / 1.65。
+            当前 Speaker：{speaker.name}；正文衬线 17px / 1.78，署名用色点区分说话人。
           </p>
-          <div className="divide-y divide-hairline">
-            <TranscriptSegmentItem segment={sampleSegment} />
+          <div>
+            <TranscriptSegmentItem segment={sampleSegment} showSpeaker />
+            <TranscriptSegmentItem
+              segment={{ ...sampleSegment, id: 'design-transcript-2', text: '同一位说话人的连续段落，不重复署名，只靠留白分段。' }}
+              showSpeaker={false}
+            />
           </div>
         </div>
 

@@ -8,8 +8,8 @@
   "id": "/library",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0a0a0a",
-  "theme_color": "#0a0a0a",
+  "background_color": "#15120e",
+  "theme_color": "#15120e",
   "categories": ["productivity", "utilities"],
   "icons": [
     {

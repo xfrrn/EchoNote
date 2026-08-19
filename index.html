@@ -7,7 +7,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
     />
-    <meta name="theme-color" content="#f7f7f8" />
+    <meta name="theme-color" content="#f5f3ee" />
     <meta name="color-scheme" content="light dark" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -45,7 +45,7 @@
           var mode = saved ? JSON.parse(saved).state.theme : 'system'
           var dark = mode === 'dark' || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
           if (dark) document.documentElement.classList.add('dark')
-          var color = dark ? '#0a0a0a' : '#f7f7f8'
+          var color = dark ? '#15120e' : '#f5f3ee'
           var meta = document.querySelector('meta[name="theme-color"]')
           if (meta) meta.setAttribute('content', color)
           var manifest = document.getElementById('pwa-manifest')

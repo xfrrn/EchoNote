@@ -21,25 +21,33 @@ export function BottomNav() {
         {items.map((item) => {
           const Icon = item.icon
           const active = item.match?.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))
-          const color = item.prominent || active ? 'text-ink' : 'text-ink-secondary'
           return (
             <Link
               key={item.to}
               to={item.to}
               aria-label={item.label}
               aria-current={active ? 'page' : undefined}
-              className={`flex min-h-11 flex-col items-center justify-center gap-0.5 transition-colors duration-fast ease-ios ${color}`}
+              className="flex min-h-11 flex-col items-center justify-center gap-0.5 transition-colors duration-fast ease-ios"
             >
               {item.prominent ? (
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-on-accent">
-                  <Icon size={17} strokeWidth={2.2} aria-hidden />
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-on-accent shadow-control transition-transform duration-fast ease-ios active:scale-95">
+                  <Icon size={18} strokeWidth={2.2} aria-hidden />
                 </span>
               ) : (
-                <Icon size={21} strokeWidth={active ? 2 : 1.8} aria-hidden />
+                <>
+                  <span className={active ? 'text-accent' : 'text-ink-secondary'}>
+                    <Icon size={22} strokeWidth={active ? 2.1 : 1.8} aria-hidden />
+                  </span>
+                  <span
+                    className={`text-caption ${active ? 'font-medium text-accent' : 'text-ink-secondary'}`}
+                  >
+                    {item.label}
+                  </span>
+                </>
               )}
-              <span className={`text-caption ${item.prominent || active ? 'font-medium' : ''}`}>
-                {item.label}
-              </span>
+              {item.prominent ? (
+                <span className="text-caption text-ink-secondary">{item.label}</span>
+              ) : null}
             </Link>
           )
         })}

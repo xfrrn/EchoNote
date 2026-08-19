@@ -1,39 +1,64 @@
 /* ---------------------------------------------------------------------------
    EchoNote Design Tokens
    语义化 Token：组件中禁止直接使用十六进制颜色，一律引用本文件变量。
+
+   「回声」视觉语言：暖纸中性色 + 朱砂强调色 + 衬线内容字。
 --------------------------------------------------------------------------- */
+
 :root {
-  /* Core surfaces */
-  --bg-primary: #f7f7f8;
-  --bg-surface: #ffffff;
-  --bg-secondary: #f1f1f3;
+  /* Type */
+  --font-sans:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Microsoft YaHei",
+    sans-serif;
+  --font-content:
+    ui-serif,
+    "Songti SC",
+    "Noto Serif CJK SC",
+    "Source Han Serif SC",
+    Georgia,
+    "Times New Roman",
+    serif;
 
-  /* Text */
-  --text-primary: #1d1d1f;
-  --text-secondary: #6e6e73;
-  --text-tertiary: #98989d;
+  /* Core surfaces —— 暖纸 */
+  --bg-primary: #f5f3ee;
+  --bg-surface: #fcfaf6;
+  --bg-secondary: #ece9e1;
 
-  /* Hairlines & controls */
-  --separator: rgba(60, 60, 67, 0.12);
-  --separator-strong: rgba(60, 60, 67, 0.2);
+  /* Text —— 暖墨 */
+  --text-primary: #211d17;
+  --text-secondary: #6e675c;
+  --text-tertiary: #9d9589;
 
-  /* Accent / status */
-  --accent: #0a78f0;
-  --accent-active: #0865cf;
-  --accent-soft: rgba(10, 120, 240, 0.1);
-  --on-accent: #ffffff;
-  --danger: #ff453a;
-  --danger-soft: rgba(255, 69, 58, 0.1);
-  --success: #30a46c;
-  --success-soft: rgba(48, 164, 108, 0.1);
+  /* Hairlines & controls —— 带暖色 */
+  --separator: rgba(84, 70, 52, 0.12);
+  --separator-strong: rgba(84, 70, 52, 0.2);
+
+  /* Accent —— 朱砂 */
+  --accent: #bc4526;
+  --accent-active: #a2381d;
+  --accent-soft: rgba(188, 69, 38, 0.1);
+  --accent-softer: rgba(188, 69, 38, 0.05);
+  --on-accent: #fdf6ef;
+
+  /* Status */
+  --danger: #c3402f;
+  --danger-soft: rgba(195, 64, 47, 0.1);
+  --success: #4c7a45;
+  --success-soft: rgba(76, 122, 69, 0.12);
 
   /* Control layers only: bottom nav / floating toolbar / modal / sheet */
-  --glass-bg: rgba(247, 247, 248, 0.78);
+  --glass-bg: rgba(245, 243, 238, 0.78);
   --glass-blur: 18px;
   --glass-saturate: 160%;
-  --overlay: rgba(0, 0, 0, 0.24);
-  --shadow-control: 0 1px 4px rgba(0, 0, 0, 0.06);
-  --shadow-sheet: 0 -12px 40px rgba(0, 0, 0, 0.14);
+  --overlay: rgba(28, 22, 15, 0.28);
+  --shadow-control: 0 1px 3px rgba(60, 48, 32, 0.07);
+  --shadow-sheet: 0 -12px 40px rgba(40, 30, 18, 0.16);
 
   /* Radius */
   --radius-sm: 8px;
@@ -45,32 +70,40 @@
 }
 
 :root.dark {
-  --bg-primary: #0a0a0a;
-  --bg-surface: #1c1c1e;
-  --bg-secondary: #2c2c2e;
+  /* Core surfaces —— 烛下墨 */
+  --bg-primary: #15120e;
+  --bg-surface: #211d17;
+  --bg-secondary: #2c2620;
 
-  --text-primary: #f5f5f7;
-  --text-secondary: #a1a1a6;
-  --text-tertiary: #6e6e73;
+  /* Text */
+  --text-primary: #f1ece2;
+  --text-secondary: #a89f91;
+  --text-tertiary: #6f665a;
 
-  --separator: rgba(84, 84, 88, 0.42);
-  --separator-strong: rgba(84, 84, 88, 0.64);
+  /* Hairlines & controls */
+  --separator: rgba(150, 132, 105, 0.18);
+  --separator-strong: rgba(150, 132, 105, 0.3);
 
-  --accent: #0a84ff;
-  --accent-active: #3d9aff;
-  --accent-soft: rgba(10, 132, 255, 0.18);
-  --on-accent: #ffffff;
-  --danger: #ff6961;
-  --danger-soft: rgba(255, 105, 97, 0.16);
-  --success: #30d158;
-  --success-soft: rgba(48, 209, 88, 0.14);
+  /* Accent —— 朱砂（暗部提亮） */
+  --accent: #e07a52;
+  --accent-active: #ea926d;
+  --accent-soft: rgba(224, 122, 82, 0.16);
+  --accent-softer: rgba(224, 122, 82, 0.08);
+  --on-accent: #1d130c;
 
-  --glass-bg: rgba(20, 20, 22, 0.72);
+  /* Status */
+  --danger: #e0665a;
+  --danger-soft: rgba(224, 102, 90, 0.16);
+  --success: #7fb069;
+  --success-soft: rgba(127, 176, 105, 0.16);
+
+  /* Control layers */
+  --glass-bg: rgba(24, 20, 15, 0.72);
   --glass-blur: 20px;
   --glass-saturate: 170%;
-  --overlay: rgba(0, 0, 0, 0.48);
-  --shadow-control: 0 1px 4px rgba(0, 0, 0, 0.28);
-  --shadow-sheet: 0 -12px 40px rgba(0, 0, 0, 0.42);
+  --overlay: rgba(0, 0, 0, 0.5);
+  --shadow-control: 0 1px 4px rgba(0, 0, 0, 0.3);
+  --shadow-sheet: 0 -12px 40px rgba(0, 0, 0, 0.46);
 
   color-scheme: dark;
 }

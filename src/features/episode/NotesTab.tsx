@@ -15,14 +15,14 @@ export function NotesTab({ episode }: { episode: Episode }) {
   }
 
   return (
-    <div>
+    <div className="pb-4">
       {episode.notes.length === 0 ? (
         <EmptyState
           title="还没有笔记"
-          detail="听节目时产生的想法，可以随时用底部「记录」快速记下来。笔记会按创建时间排列在这里。"
+          detail="听节目时冒出的想法，随时用底部「记录」记下来。它们会按时间排在这里，并被 AI 整理进这期节目。"
         />
       ) : (
-        <div className="divide-y divide-hairline">
+        <div>
           {episode.notes.map((note) => (
             <NoteItem key={note.id} note={note} />
           ))}
@@ -33,7 +33,7 @@ export function NotesTab({ episode }: { episode: Episode }) {
         <button
           type="button"
           onClick={startCapture}
-          className="flex min-h-11 w-full items-center gap-2 text-accent transition-colors duration-fast ease-ios active:bg-subtle"
+          className="flex min-h-11 w-full items-center gap-2 rounded-md text-accent transition-colors duration-fast ease-ios active:bg-subtle"
         >
           <Plus size={19} strokeWidth={2} aria-hidden />
           <span className="text-callout">记录想法</span>
