@@ -13,17 +13,17 @@ interface CoverTheme {
  * 保证整个资料库视觉同源、不花哨。
  */
 const CURATED: Record<string, CoverTheme> = {
-  硅谷101: { from: '#3d4b5c', to: '#232d38', glyph: '#f2e9da', wave: '#e07a52' },
-  '原点 The Origin': { from: '#b26a3f', to: '#7d4426', glyph: '#f8ecdd', wave: '#2e1c10' },
-  声动早咖啡: { from: '#8a6a48', to: '#584026', glyph: '#f5ead6', wave: '#e8b04b' },
-  '晚点聊 LateTalk': { from: '#3d5a4a', to: '#243329', glyph: '#e9efdf', wave: '#d98a52' }
+  硅谷101: { from: '#5b6b7d', to: '#3d4855', glyph: '#f5f6f8', wave: '#0a84ff' },
+  '原点 The Origin': { from: '#7d7468', to: '#575046', glyph: '#f6f4f1', wave: '#0a84ff' },
+  声动早咖啡: { from: '#6d7684', to: '#494f5a', glyph: '#f5f6f8', wave: '#0a84ff' },
+  '晚点聊 LateTalk': { from: '#5f6d66', to: '#414b45', glyph: '#f4f6f4', wave: '#0a84ff' }
 }
 
 const FALLBACK_PALETTE: CoverTheme[] = [
-  { from: '#5a4a6a', to: '#3c2f49', glyph: '#efe6f2', wave: '#e07a52' },
-  { from: '#6a5a3a', to: '#463c26', glyph: '#f2ecda', wave: '#d98a52' },
-  { from: '#3a5a66', to: '#26404a', glyph: '#dfeef2', wave: '#e8b04b' },
-  { from: '#66463e', to: '#462e28', glyph: '#f2e4de', wave: '#e07a52' }
+  { from: '#66707c', to: '#454c56', glyph: '#f4f5f7', wave: '#0a84ff' },
+  { from: '#6f6a76', to: '#4a464f', glyph: '#f5f4f6', wave: '#0a84ff' },
+  { from: '#5f6d75', to: '#414a50', glyph: '#f3f5f6', wave: '#0a84ff' },
+  { from: '#6a6f66', to: '#484c45', glyph: '#f4f5f3', wave: '#0a84ff' }
 ]
 
 function hashTitle(title: string): number {

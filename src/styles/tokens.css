@@ -2,7 +2,8 @@
    EchoNote Design Tokens
    语义化 Token：组件中禁止直接使用十六进制颜色，一律引用本文件变量。
 
-   「回声」视觉语言：暖纸中性色 + 朱砂强调色 + 衬线内容字。
+   方向：Apple 原生(Settings / App Store / iOS 系统界面)。
+   白色 + 浅灰 + 黑色为主,系统蓝只作强调;安静、干净、克制。
 --------------------------------------------------------------------------- */
 
 :root {
@@ -25,40 +26,40 @@
     "Times New Roman",
     serif;
 
-  /* Core surfaces —— 暖纸 */
-  --bg-primary: #f5f3ee;
-  --bg-surface: #fcfaf6;
-  --bg-secondary: #ece9e1;
+  /* Core surfaces —— Apple Grouped Background */
+  --bg-primary: #f2f2f7; /* systemGroupedBackground */
+  --bg-surface: #ffffff; /* secondarySystemGroupedBackground / 卡片·列表项 */
+  --bg-secondary: #e9e9ee; /* 填充控件 / 分段控件轨道 */
 
-  /* Text —— 暖墨 */
-  --text-primary: #211d17;
-  --text-secondary: #6e675c;
-  --text-tertiary: #9d9589;
+  /* Text —— Apple Label */
+  --text-primary: #1c1c1e; /* label(近黑而非纯黑) */
+  --text-secondary: #6e6e73; /* secondaryLabel */
+  --text-tertiary: #a9a9ae; /* tertiaryLabel */
 
-  /* Hairlines & controls —— 带暖色 */
-  --separator: rgba(84, 70, 52, 0.12);
-  --separator-strong: rgba(84, 70, 52, 0.2);
+  /* Hairlines & controls */
+  --separator: rgba(60, 60, 67, 0.12);
+  --separator-strong: rgba(60, 60, 67, 0.2);
 
-  /* Accent —— 朱砂 */
-  --accent: #bc4526;
-  --accent-active: #a2381d;
-  --accent-soft: rgba(188, 69, 38, 0.1);
-  --accent-softer: rgba(188, 69, 38, 0.05);
-  --on-accent: #fdf6ef;
+  /* Accent —— Apple System Blue */
+  --accent: #007aff;
+  --accent-active: #0a64d8;
+  --accent-soft: rgba(0, 122, 255, 0.12);
+  --accent-softer: rgba(0, 122, 255, 0.06);
+  --on-accent: #ffffff;
 
   /* Status */
-  --danger: #c3402f;
-  --danger-soft: rgba(195, 64, 47, 0.1);
-  --success: #4c7a45;
-  --success-soft: rgba(76, 122, 69, 0.12);
+  --danger: #ff3b30;
+  --danger-soft: rgba(255, 59, 48, 0.12);
+  --success: #34c759;
+  --success-soft: rgba(52, 199, 89, 0.14);
 
   /* Control layers only: bottom nav / floating toolbar / modal / sheet */
-  --glass-bg: rgba(245, 243, 238, 0.78);
-  --glass-blur: 18px;
-  --glass-saturate: 160%;
-  --overlay: rgba(28, 22, 15, 0.28);
-  --shadow-control: 0 1px 3px rgba(60, 48, 32, 0.07);
-  --shadow-sheet: 0 -12px 40px rgba(40, 30, 18, 0.16);
+  --glass-bg: rgba(249, 249, 251, 0.82);
+  --glass-blur: 20px;
+  --glass-saturate: 180%;
+  --overlay: rgba(0, 0, 0, 0.4);
+  --shadow-control: 0 0.5px 2px rgba(0, 0, 0, 0.08);
+  --shadow-sheet: 0 -12px 40px rgba(0, 0, 0, 0.16);
 
   /* Radius */
   --radius-sm: 8px;
@@ -70,40 +71,40 @@
 }
 
 :root.dark {
-  /* Core surfaces —— 烛下墨 */
-  --bg-primary: #15120e;
-  --bg-surface: #211d17;
-  --bg-secondary: #2c2620;
+  /* Core surfaces —— Apple Dark Grouped Background */
+  --bg-primary: #000000; /* systemGroupedBackground (Dark) */
+  --bg-surface: #1c1c1e; /* secondarySystemGroupedBackground */
+  --bg-secondary: #2c2c2e; /* 填充控件 */
 
   /* Text */
-  --text-primary: #f1ece2;
-  --text-secondary: #a89f91;
-  --text-tertiary: #6f665a;
+  --text-primary: #f2f2f7; /* label */
+  --text-secondary: #98989d; /* secondaryLabel */
+  --text-tertiary: #636366; /* tertiaryLabel */
 
   /* Hairlines & controls */
-  --separator: rgba(150, 132, 105, 0.18);
-  --separator-strong: rgba(150, 132, 105, 0.3);
+  --separator: rgba(84, 84, 88, 0.6);
+  --separator-strong: rgba(84, 84, 88, 0.72);
 
-  /* Accent —— 朱砂（暗部提亮） */
-  --accent: #e07a52;
-  --accent-active: #ea926d;
-  --accent-soft: rgba(224, 122, 82, 0.16);
-  --accent-softer: rgba(224, 122, 82, 0.08);
-  --on-accent: #1d130c;
+  /* Accent —— Apple System Blue (Dark) */
+  --accent: #0a84ff;
+  --accent-active: #409cff;
+  --accent-soft: rgba(10, 132, 255, 0.22);
+  --accent-softer: rgba(10, 132, 255, 0.12);
+  --on-accent: #ffffff;
 
   /* Status */
-  --danger: #e0665a;
-  --danger-soft: rgba(224, 102, 90, 0.16);
-  --success: #7fb069;
-  --success-soft: rgba(127, 176, 105, 0.16);
+  --danger: #ff453a;
+  --danger-soft: rgba(255, 69, 58, 0.18);
+  --success: #30d158;
+  --success-soft: rgba(48, 209, 88, 0.18);
 
   /* Control layers */
-  --glass-bg: rgba(24, 20, 15, 0.72);
+  --glass-bg: rgba(22, 22, 24, 0.78);
   --glass-blur: 20px;
-  --glass-saturate: 170%;
-  --overlay: rgba(0, 0, 0, 0.5);
-  --shadow-control: 0 1px 4px rgba(0, 0, 0, 0.3);
-  --shadow-sheet: 0 -12px 40px rgba(0, 0, 0, 0.46);
+  --glass-saturate: 180%;
+  --overlay: rgba(0, 0, 0, 0.55);
+  --shadow-control: 0 0.5px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sheet: 0 -12px 40px rgba(0, 0, 0, 0.5);
 
   color-scheme: dark;
 }

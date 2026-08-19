@@ -253,17 +253,17 @@ export function getSpeaker(speakerId: Speaker['id']): Speaker {
 
 /**
  * 每位说话人一个克制的识别色（仅用于名字前的小色点）。
- * 选用中间调，保证在暖纸与暗色两种背景下都清晰、不刺眼。
+ * 选用中间调，保证在浅色与深色两种背景下都清晰、不刺眼。
  */
 const speakerTones: Record<Speaker['id'], string> = {
-  host: '#c2502e',
-  peng: '#3e7a6e',
-  guest: '#a8763e',
-  audience: '#7d776c'
+  host: '#0a84ff',
+  peng: '#5e5ce6',
+  guest: '#8e8e93',
+  audience: '#aeaeb2'
 }
 
 export function speakerTone(speakerId: Speaker['id']): string {
-  return speakerTones[speakerId] ?? '#7d776c'
+  return speakerTones[speakerId] ?? '#8e8e93'
 }
 
 export function useTranscript(episodeId: string): TranscriptSegment[] {
