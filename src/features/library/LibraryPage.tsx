@@ -4,7 +4,6 @@ import { useEpisodes } from '../../shared/mock/episodes'
 import { EpisodeRow } from './EpisodeRow'
 import { SectionLabel } from '../../shared/components/SectionLabel'
 import { EchoMark } from '../../shared/components/EchoMark'
-import { Waveform } from '../../shared/components/Waveform'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { ImportSheet } from './ImportSheet'
 
@@ -38,20 +37,20 @@ export function LibraryPage() {
         />
       ) : (
         <>
-          <div className="flex items-center justify-between pr-4">
-            <SectionLabel className="pt-4">最近</SectionLabel>
-            <Waveform bars={18} seed="library" className="mt-4 h-4 w-24 text-ink-tertiary opacity-70" />
-          </div>
+          <SectionLabel className="pt-4">最近</SectionLabel>
 
-          <section aria-label="最近节目">
-            <div className="divide-y divide-hairline">
-              {episodes.map((episode) => (
-                <EpisodeRow key={episode.id} episode={episode} />
-              ))}
+          {/* 分组白色卡片(参考 Apple Settings 的 inset-grouped 列表) */}
+          <section aria-label="最近节目" className="px-4">
+            <div className="overflow-hidden rounded-md bg-surface">
+              <div className="divide-y divide-hairline">
+                {episodes.map((episode) => (
+                  <EpisodeRow key={episode.id} episode={episode} />
+                ))}
+              </div>
             </div>
           </section>
 
-          <p className="px-4 pt-6 text-caption text-ink-tertiary">
+          <p className="px-4 pt-4 text-caption text-ink-tertiary">
             {episodes.length} 个节目 · 听过的声音，都值得留下痕迹
           </p>
         </>

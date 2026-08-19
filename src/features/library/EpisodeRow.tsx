@@ -14,13 +14,13 @@ export function EpisodeRow({ episode }: EpisodeRowProps) {
   return (
     <Link
       to={`/episode/${episode.id}`}
-      className="group flex min-h-[92px] items-center gap-3.5 px-4 py-4 transition-colors duration-fast ease-ios active:bg-subtle"
+      className="group flex min-h-[76px] items-center gap-3 py-3 pl-3.5 pr-3 transition-colors duration-fast ease-ios active:bg-subtle"
     >
       <ShowCover showTitle={episode.showTitle} glyph={episode.coverLabel} size="md" />
       <div className="min-w-0 flex-1">
-        <p className="text-caption text-ink-secondary">{episode.showTitle}</p>
-        <h2 className="mt-0.5 line-clamp-2 text-headline text-ink">{episode.episodeTitle}</h2>
-        <p className="mt-1 text-caption text-ink-tertiary">
+        <p className="truncate text-caption text-ink-tertiary">{episode.showTitle}</p>
+        <h2 className="mt-0.5 line-clamp-2 text-headline leading-snug text-ink">{episode.episodeTitle}</h2>
+        <p className="mt-0.5 text-caption text-ink-tertiary">
           {noteLabel}
           <span aria-hidden className="mx-1.5">
             ·
