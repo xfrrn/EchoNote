@@ -57,15 +57,27 @@ export function SquareStack({ filled = false, size = 24 }: TabIconProps) {
   )
 }
 
-/** 记录 —— 加号(中央主操作,线性) */
-export function Plus({ size = 24 }: TabIconProps) {
+/** 记录 —— 方形便签 + 笔(参考 square.and.pencil) */
+export function SquarePen({ filled = false, size = 24 }: TabIconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M12 5.5v13M5.5 12h13"
+      <rect
+        x="3.5"
+        y="3.5"
+        width="17"
+        height="17"
+        rx="4"
         stroke="currentColor"
         strokeWidth={stroke}
-        strokeLinecap="round"
+        fill={filled ? 'currentColor' : 'none'}
+        fillOpacity={filled ? 0.16 : 0}
+      />
+      <path
+        d="M9.6 14.4l.7-2.7 4.4-4.4a1.5 1.5 0 0 1 2.1 2.1l-4.4 4.4-2.8.7z"
+        stroke="currentColor"
+        strokeWidth={stroke}
+        strokeLinejoin="round"
+        fill={filled ? 'currentColor' : 'none'}
       />
     </svg>
   )

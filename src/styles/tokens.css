@@ -54,12 +54,15 @@
   --success-soft: rgba(52, 199, 89, 0.14);
 
   /* Control layers only: bottom nav / floating toolbar / modal / sheet */
-  --glass-bg: rgba(249, 249, 251, 0.82);
-  --glass-blur: 20px;
-  --glass-saturate: 180%;
+  --glass-bg: rgba(249, 249, 251, 0.72);
+  --glass-blur: 28px;
+  --glass-saturate: 190%;
+  --glass-nav-bg: rgba(250, 250, 252, 0.52);
+  --glass-nav-border: rgba(255, 255, 255, 0.55);
   --overlay: rgba(0, 0, 0, 0.4);
   --shadow-control: 0 0.5px 2px rgba(0, 0, 0, 0.08);
   --shadow-sheet: 0 -12px 40px rgba(0, 0, 0, 0.16);
+  --shadow-float: 0 8px 28px rgba(0, 0, 0, 0.12);
 
   /* Radius */
   --radius-sm: 8px;
@@ -102,9 +105,12 @@
   --glass-bg: rgba(22, 22, 24, 0.78);
   --glass-blur: 20px;
   --glass-saturate: 180%;
+  --glass-nav-bg: rgba(30, 30, 32, 0.5);
+  --glass-nav-border: rgba(255, 255, 255, 0.14);
   --overlay: rgba(0, 0, 0, 0.55);
   --shadow-control: 0 0.5px 2px rgba(0, 0, 0, 0.4);
   --shadow-sheet: 0 -12px 40px rgba(0, 0, 0, 0.5);
+  --shadow-float: 0 8px 28px rgba(0, 0, 0, 0.5);
 
   color-scheme: dark;
 }

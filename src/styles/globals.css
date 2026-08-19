@@ -132,6 +132,15 @@
     backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
   }
 
+  /* 底部悬浮玻璃胶囊(参考 Apple Arcade 底部导航):内容透出、边缘柔光 */
+  .glass-nav {
+    background: var(--glass-nav-bg);
+    -webkit-backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+    backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+    border: 0.5px solid var(--glass-nav-border);
+    box-shadow: var(--shadow-float);
+  }
+
   .search-highlight {
     color: var(--accent);
     background: transparent;

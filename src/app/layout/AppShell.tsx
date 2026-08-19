@@ -38,7 +38,7 @@ export function AppShell() {
     <div className="safe-sides app-viewport w-full bg-canvas text-ink">
       <div className="mx-auto flex app-viewport w-full max-w-app flex-col bg-canvas">
         <div className="safe-top" />
-        <main className="flex-1 pb-28">
+        <main className="flex-1 pb-32">
           <div key={location.pathname} className={animationClass}>
             <Outlet />
           </div>
