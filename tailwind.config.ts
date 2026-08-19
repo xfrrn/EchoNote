@@ -103,6 +103,9 @@ export default {
         'page-fade': 'page-fade 220ms cubic-bezier(.2,.8,.2,1) both',
         'page-forward': 'page-forward 300ms cubic-bezier(.2,.8,.2,1) both',
         'page-back': 'page-back 300ms cubic-bezier(.2,.8,.2,1) both'
+      },
+      scale: {
+        '97': '0.97'
       }
     }
   },

@@ -1,5 +1,5 @@
-import { Link } from 'react-router-dom'
 import type { SearchResultItem } from '../../shared/types'
+import { RowLink } from '../../shared/components/RowLink'
 import { HighlightedText } from './HighlightedText'
 
 function tabForKind(kind: SearchResultItem['kind']): string {
@@ -10,9 +10,9 @@ function tabForKind(kind: SearchResultItem['kind']): string {
 
 export function SearchResultRow({ item, query }: { item: SearchResultItem; query: string }) {
   return (
-    <Link
+    <RowLink
       to={`/episode/${item.episodeId}?tab=${tabForKind(item.kind)}`}
-      className="block px-3.5 py-3 transition-colors duration-fast ease-ios active:bg-subtle"
+      className="block px-3.5 py-3"
     >
       <p className="text-caption text-ink-secondary">
         {item.showTitle}
@@ -24,6 +24,6 @@ export function SearchResultRow({ item, query }: { item: SearchResultItem; query
       <p className="mt-1.5 font-serif text-body-serif text-ink">
         <HighlightedText text={item.snippet} query={query} />
       </p>
-    </Link>
+    </RowLink>
   )
 }

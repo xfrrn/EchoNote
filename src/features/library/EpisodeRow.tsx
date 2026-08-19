@@ -1,7 +1,7 @@
-import { Link } from 'react-router-dom'
 import { ChevronRight } from 'lucide-react'
 import type { Episode } from '../../shared/types'
 import { ShowCover } from '../../shared/components/ShowCover'
+import { RowLink } from '../../shared/components/RowLink'
 import { statusLabels, statusTextClass } from '../../shared/mock/episodes'
 
 interface EpisodeRowProps {
@@ -12,9 +12,9 @@ export function EpisodeRow({ episode }: EpisodeRowProps) {
   const noteLabel = episode.notes.length === 0 ? '暂无笔记' : `${episode.notes.length} 条记录`
 
   return (
-    <Link
+    <RowLink
       to={`/episode/${episode.id}`}
-      className="group flex min-h-[76px] items-center gap-3 py-3 pl-3.5 pr-3 transition-colors duration-fast ease-ios active:bg-subtle"
+      className="group flex min-h-[76px] items-center gap-3 py-3 pl-3.5 pr-3"
     >
       <ShowCover showTitle={episode.showTitle} glyph={episode.coverLabel} size="md" />
       <div className="min-w-0 flex-1">
@@ -34,6 +34,6 @@ export function EpisodeRow({ episode }: EpisodeRowProps) {
         className="shrink-0 text-ink-tertiary transition-transform duration-fast ease-ios group-active:translate-x-0.5"
         aria-hidden
       />
-    </Link>
+    </RowLink>
   )
 }

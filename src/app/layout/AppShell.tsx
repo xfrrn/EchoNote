@@ -12,7 +12,7 @@ function isTabRoute(pathname: string): boolean {
  * 页面切换动画(贴合 iOS 的克制动效):
  * - Tab 之间切换:仅淡入
  * - 进入下一级(列表 → 详情):从右侧轻推入(前进)
- * - 返回上一级:从左侧轻推入(后退)
+ * - 返回上一级:从左侧轻推入(后退),形成「上一页被接回来」的视差回拉
  * 全程尊重 prefers-reduced-motion(全局 CSS 已兜底)。
  */
 export function AppShell() {
@@ -25,7 +25,9 @@ export function AppShell() {
 
   let animationClass = 'animate-page-fade'
   if (isTabRoute(location.pathname)) {
-    animationClass = 'animate-page-fade'
+    // Tab 之间:淡入;返回 Tab 时略带从左侧的视差回拉,像上一页被「接回来」
+    animationClass =
+      navigationType === 'POP' ? 'animate-page-back' : 'animate-page-fade'
   } else if (navigationType === 'POP') {
     animationClass = 'animate-page-back'
   } else {
