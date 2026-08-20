@@ -5,3 +5,13 @@ dev-dist
 .DS_Store
 *.local
 .playwright-mcp/
+
+# 环境与密钥
+.env
+.env.*
+!.env.example
+
+# Go 后端
+apps/server/bin/
+*.exe
+*.out
