@@ -130,6 +130,30 @@ func (e ConversationScope) Valid() bool {
 	}
 }
 
+// Defines values for ExportMode.
+const (
+	FullTranscript     ExportMode = "full_transcript"
+	NotesOnly          ExportMode = "notes_only"
+	OrganizedNote      ExportMode = "organized_note"
+	SelectedTranscript ExportMode = "selected_transcript"
+)
+
+// Valid indicates whether the value is a known member of the ExportMode enum.
+func (e ExportMode) Valid() bool {
+	switch e {
+	case FullTranscript:
+		return true
+	case NotesOnly:
+		return true
+	case OrganizedNote:
+		return true
+	case SelectedTranscript:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ImportResponseStatus.
 const (
 	ImportResponseStatusCanceled  ImportResponseStatus = "canceled"
@@ -538,6 +562,26 @@ type CreateConversationRequest struct {
 	Title     *string           `json:"title,omitempty"`
 }
 
+// CreateExportRequest defines model for CreateExportRequest.
+type CreateExportRequest struct {
+	// IncludeKeyPoints Organized-note option; defaults to true when omitted.
+	IncludeKeyPoints *bool `json:"include_key_points,omitempty"`
+
+	// IncludeSummary Organized-note option; defaults to true when omitted.
+	IncludeSummary *bool `json:"include_summary,omitempty"`
+
+	// IncludeTranscript Organized-note option. Includes the selected Segment IDs, or the first four active Transcript Segments when no IDs are supplied.
+	IncludeTranscript *bool `json:"include_transcript,omitempty"`
+
+	// IncludeUserNotes Organized-note option; defaults to true when omitted.
+	IncludeUserNotes *bool `json:"include_user_notes,omitempty"`
+
+	// IncludeWorthReviewing Organized-note option; defaults to true when omitted.
+	IncludeWorthReviewing *bool      `json:"include_worth_reviewing,omitempty"`
+	Mode                  ExportMode `json:"mode"`
+	TranscriptSegmentIds  *[]string  `json:"transcript_segment_ids,omitempty"`
+}
+
 // CreateImportRequest defines model for CreateImportRequest.
 type CreateImportRequest struct {
 	Url string `json:"url"`
@@ -616,6 +660,19 @@ type ErrorResponse struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
 }
+
+// ExportContent defines model for ExportContent.
+type ExportContent struct {
+	Markdown          string `json:"markdown"`
+	SuggestedFilename string `json:"suggested_filename"`
+
+	// Text Plain text suitable for Clipboard and the iOS Share Sheet.
+	Text  string `json:"text"`
+	Title string `json:"title"`
+}
+
+// ExportMode defines model for ExportMode.
+type ExportMode string
 
 // ImportError defines model for ImportError.
 type ImportError struct {
@@ -854,6 +911,9 @@ type InternalError = ErrorResponse
 // NotFound defines model for NotFound.
 type NotFound = ErrorResponse
 
+// PayloadTooLarge defines model for PayloadTooLarge.
+type PayloadTooLarge = ErrorResponse
+
 // ServiceUnavailable defines model for ServiceUnavailable.
 type ServiceUnavailable = ErrorResponse
 
@@ -891,6 +951,9 @@ type CreateConversationJSONRequestBody = CreateConversationRequest
 
 // StreamConversationMessageJSONRequestBody defines body for StreamConversationMessage for application/json ContentType.
 type StreamConversationMessageJSONRequestBody = CreateConversationMessageRequest
+
+// CreateEpisodeExportJSONRequestBody defines body for CreateEpisodeExport for application/json ContentType.
+type CreateEpisodeExportJSONRequestBody = CreateExportRequest
 
 // CreateEpisodeNoteJSONRequestBody defines body for CreateEpisodeNote for application/json ContentType.
 type CreateEpisodeNoteJSONRequestBody = CreateNoteRequest
@@ -942,6 +1005,9 @@ type ServerInterface interface {
 	// RequestEpisodeAIArtifact Return a cached Episode summary or enqueue on-demand generation
 	// (POST /api/v1/episodes/{episodeId}/ai/artifacts)
 	RequestEpisodeAIArtifact(w http.ResponseWriter, r *http.Request, episodeId string)
+	// CreateEpisodeExport Compose an Apple Notes share text and Markdown export
+	// (POST /api/v1/episodes/{episodeId}/exports)
+	CreateEpisodeExport(w http.ResponseWriter, r *http.Request, episodeId string)
 	// ListEpisodeNotes List active Notes for an Episode
 	// (GET /api/v1/episodes/{episodeId}/notes)
 	ListEpisodeNotes(w http.ResponseWriter, r *http.Request, episodeId string)
@@ -1056,6 +1122,12 @@ func (_ Unimplemented) ListEpisodeAIArtifacts(w http.ResponseWriter, r *http.Req
 // RequestEpisodeAIArtifact Return a cached Episode summary or enqueue on-demand generation
 // (POST /api/v1/episodes/{episodeId}/ai/artifacts)
 func (_ Unimplemented) RequestEpisodeAIArtifact(w http.ResponseWriter, r *http.Request, episodeId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CreateEpisodeExport Compose an Apple Notes share text and Markdown export
+// (POST /api/v1/episodes/{episodeId}/exports)
+func (_ Unimplemented) CreateEpisodeExport(w http.ResponseWriter, r *http.Request, episodeId string) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1403,6 +1475,32 @@ func (siw *ServerInterfaceWrapper) RequestEpisodeAIArtifact(w http.ResponseWrite
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RequestEpisodeAIArtifact(w, r, episodeId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateEpisodeExport operation middleware
+func (siw *ServerInterfaceWrapper) CreateEpisodeExport(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "episodeId" -------------
+	var episodeId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "episodeId", chi.URLParam(r, "episodeId"), &episodeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "episodeId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateEpisodeExport(w, r, episodeId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2126,6 +2224,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/episodes/{episodeId}/ai/artifacts", wrapper.RequestEpisodeAIArtifact)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/episodes/{episodeId}/exports", wrapper.CreateEpisodeExport)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/conversations", wrapper.CreateConversation)

@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: EchoNote API
-  version: 0.7.0
+  version: 0.8.0
   description: EchoNote modular-monolith HTTP API.
 paths:
   /healthz:
@@ -435,6 +435,42 @@ paths:
           $ref: "#/components/responses/ServiceUnavailable"
         "500":
           $ref: "#/components/responses/InternalError"
+  /api/v1/episodes/{episodeId}/exports:
+    parameters:
+      - name: episodeId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: createEpisodeExport
+      summary: Compose an Apple Notes share text and Markdown export
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateExportRequest"
+      responses:
+        "200":
+          description: Stateless export content generated from a consistent Episode snapshot.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportContent"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /api/v1/conversations:
     post:
       operationId: createConversation
@@ -844,6 +880,15 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
     Conflict:
       description: Resource state conflicts with the request.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    PayloadTooLarge:
+      description: Generated content exceeds the synchronous export limit.
       headers:
         X-Request-ID:
           $ref: "#/components/headers/RequestID"
@@ -1442,6 +1487,62 @@ components:
         updated_at:
           type: string
           format: date-time
+    ExportMode:
+      type: string
+      enum:
+        - notes_only
+        - organized_note
+        - selected_transcript
+        - full_transcript
+    CreateExportRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - mode
+      properties:
+        mode:
+          $ref: "#/components/schemas/ExportMode"
+        include_user_notes:
+          type: boolean
+          description: Organized-note option; defaults to true when omitted.
+        include_summary:
+          type: boolean
+          description: Organized-note option; defaults to true when omitted.
+        include_key_points:
+          type: boolean
+          description: Organized-note option; defaults to true when omitted.
+        include_worth_reviewing:
+          type: boolean
+          description: Organized-note option; defaults to true when omitted.
+        include_transcript:
+          type: boolean
+          description: >-
+            Organized-note option. Includes the selected Segment IDs, or the
+            first four active Transcript Segments when no IDs are supplied.
+        transcript_segment_ids:
+          type: array
+          maxItems: 200
+          uniqueItems: true
+          items:
+            type: string
+    ExportContent:
+      type: object
+      additionalProperties: false
+      required:
+        - title
+        - text
+        - markdown
+        - suggested_filename
+      properties:
+        title:
+          type: string
+        text:
+          type: string
+          description: Plain text suitable for Clipboard and the iOS Share Sheet.
+        markdown:
+          type: string
+        suggested_filename:
+          type: string
     TranscriptionProfile:
       type: string
       enum:

@@ -1,6 +1,6 @@
 # EchoNote 后端
 
-Go 模块化单体，当前完成 Phase 1–7：基础设施、Import、Library、Notes、异步 Transcription / Transcript / Speaker、Search，以及 AI 垂直切片。
+Go 模块化单体，当前完成 Phase 1–8：基础设施、Import、Library、Notes、异步 Transcription / Transcript / Speaker、Search、AI，以及 Export 垂直切片。
 
 ## 本地启动
 
@@ -156,6 +156,16 @@ POST /api/v1/conversations/{conversation_id}/messages  SSE
 
 Artifact 一次返回一句话总结、核心观点、人物观点、值得回顾和笔记关联。Transcript、Speaker 或 Note 改变后旧结果保留但标记为 `stale`。Conversation 当前只支持 Episode Scope；每条消息需要稳定 UUID `client_message_id`，完成结果可幂等回放。Citation 只允许指向本次检索得到的真实 Segment / Note。
 
+## Export API
+
+```text
+POST /api/v1/episodes/{episode_id}/exports
+```
+
+支持 `notes_only`、`organized_note`、`selected_transcript` 与 `full_transcript`。响应同时包含适合 Clipboard / iOS Share Sheet 的 `text`、可保存为文件的 `markdown` 和安全 `suggested_filename`。后端不直接写 Apple Notes；PWA 调用系统 Share Sheet 后由用户选择目标 App。
+
+Export 是无状态同步操作，不创建数据库记录、Job 或对象存储文件。只读取 ready AI Artifact 和 active Transcript，并在同一个只读一致性快照中生成；任一输出超过 4 MiB 会明确返回 413，不静默截断。
+
 ## Migration 与代码生成
 
 ```bash
@@ -174,7 +184,7 @@ go test ./...
 go vet ./...
 ```
 
-PostgreSQL 集成测试默认跳过。显式提供隔离的测试数据库后会执行 Migration，并验证 Job 生命周期、跨来源去重、Library 分页、Notes HTTP 生命周期、并发离线幂等、3 小时转录、Speaker ID 对调、单 Chunk 恢复、Transcript Version、Search、AI Artifact 缓存/失效、SSE Conversation、Citation 白名单、用户隔离与删除级联：
+PostgreSQL 集成测试默认跳过。显式提供隔离的测试数据库后会执行 Migration，并验证 Job 生命周期、跨来源去重、Library 分页、Notes HTTP 生命周期、并发离线幂等、3 小时转录、Speaker ID 对调、单 Chunk 恢复、Transcript Version、Search、AI Artifact 缓存/失效、SSE Conversation、Citation 白名单、四种 Export Mode、用户隔离与删除级联：
 
 ```text
 ECHONOTE_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/echonote_test?sslmode=disable
@@ -191,13 +201,13 @@ cmd/migrate/             Migration CLI
 internal/config/         环境配置
 internal/database/       pgx 连接、migration 与 sqlc 生成代码
 internal/http/           Chi 路由、OpenAPI handler、中间件
-internal/domain/         Podcast、Transcription、Search 与 AI 领域规则
+internal/domain/         Podcast、Transcription、Search、AI 与 Export 领域规则
 internal/provider/       Podcast、音频、阿里云 ASR/Embedding/LLM、OSS 与安全 HTTP Provider
 internal/repository/     业务持久化与 PostgreSQL Job Queue
-internal/service/        Import、Transcription、Search 与 AI Job/Stream 编排
+internal/service/        Import、Transcription、Search、AI 与 Export 编排
 internal/worker/         Job 消费、续租、分类重试与崩溃隔离
 migrations/              版本化 SQL
 openapi/                 HTTP 契约
 ```
 
-实施记录见 `docs/architecture/phase-1-foundation.md` 至 `docs/architecture/phase-7-ai.md`；固定转录算法见 `docs/architecture/transcription.md`。
+实施记录见 `docs/architecture/phase-1-foundation.md` 至 `docs/architecture/phase-8-export.md`；固定转录算法见 `docs/architecture/transcription.md`。

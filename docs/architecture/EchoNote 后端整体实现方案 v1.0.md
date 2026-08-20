@@ -842,6 +842,12 @@ AI 整理笔记
 
 导出本身可以是无状态操作，不需要一开始创建 `exports` 数据表。
 
+### Phase 8 实施澄清
+
+四种 API Mode 落地为 `notes_only`、`organized_note`、`selected_transcript` 与 `full_transcript`。一次响应同时返回 Apple Notes 友好的纯文本、Markdown 与安全建议文件名，PWA 继续负责 Clipboard / iOS Share Sheet；后端不创建 Apple Notes Provider。
+
+Export 使用只读 `REPEATABLE READ` 快照，AI Section 只接受当前 ready Artifact，选中 Segment 必须全部属于 active Transcript。同步输出上限为 4 MiB，超过时明确返回 413 且不截断。第一版保持无状态，因此没有增加 Migration、Export 表、Job 或对象存储文件；需要异步大文件或历史下载链接时再扩展。
+
 ---
 
 ## 3.11 Settings：用户设置

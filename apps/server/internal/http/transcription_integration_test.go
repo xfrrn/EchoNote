@@ -58,7 +58,7 @@ func TestTranscriptionHTTPFlow(t *testing.T) {
 	transcriptions := repository.NewTranscriptionRepository(pool)
 	router := NewRouter(
 		pool, imports, repository.NewLibraryRepository(pool), repository.NewNotesRepository(pool),
-		transcriptions, nil, nil, true, userID, slog.New(slog.NewTextHandler(io.Discard, nil)),
+		transcriptions, nil, nil, nil, true, userID, slog.New(slog.NewTextHandler(io.Discard, nil)),
 	)
 
 	path := "/api/v1/episodes/" + formatUUID(episodeID) + "/transcriptions"

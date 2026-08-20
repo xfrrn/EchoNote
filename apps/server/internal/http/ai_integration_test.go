@@ -104,7 +104,7 @@ func TestAIArtifactAndConversationHTTP(t *testing.T) {
 	searchService := service.NewSearchService(searchRepository, nil)
 	aiService := service.NewAIService(aiRepository, searchService, provider)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	router := NewRouter(pool, imports, repository.NewLibraryRepository(pool), notes, nil, searchService, aiService, false, userID, logger)
+	router := NewRouter(pool, imports, repository.NewLibraryRepository(pool), notes, nil, searchService, aiService, nil, false, userID, logger)
 
 	artifactPath := "/api/v1/episodes/" + formatUUID(episodeID) + "/ai/artifacts"
 	response := serveAIRequest(router, http.MethodPost, artifactPath, "")
@@ -200,7 +200,7 @@ func TestAIArtifactAndConversationHTTP(t *testing.T) {
 		t.Fatalf("conversation history=%+v err=%v", history, err)
 	}
 
-	otherRouter := NewRouter(pool, nil, nil, nil, nil, nil, aiService, false, otherUserID, logger)
+	otherRouter := NewRouter(pool, nil, nil, nil, nil, nil, aiService, nil, false, otherUserID, logger)
 	response = serveAIRequest(otherRouter, http.MethodGet, "/api/v1/conversations/"+conversation.Id, "")
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("conversation isolation status=%d body=%s", response.Code, response.Body.String())

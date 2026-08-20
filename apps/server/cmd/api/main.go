@@ -68,6 +68,7 @@ func run() error {
 		logger.Warn("AI generation disabled", "reason", cfg.ValidateLLM())
 	}
 	aiService := service.NewAIService(repository.NewAIRepository(pool), searchService, llmProvider)
+	exportService := service.NewExportService(repository.NewExportRepository(pool))
 
 	server := &http.Server{
 		Addr: ":" + strconv.Itoa(cfg.ServerPort),
@@ -79,6 +80,7 @@ func run() error {
 			repository.NewTranscriptionRepository(pool),
 			searchService,
 			aiService,
+			exportService,
 			cfg.TranscriptionEnabled(),
 			cfg.UserID,
 			logger,

@@ -35,6 +35,7 @@ type Server struct {
 	transcriptions       *repository.TranscriptionRepository
 	searches             *service.SearchService
 	ai                   *service.AIService
+	exports              *service.ExportService
 	transcriptionEnabled bool
 	userID               pgtype.UUID
 	logger               *slog.Logger
@@ -50,6 +51,7 @@ func NewRouter(
 	transcriptions *repository.TranscriptionRepository,
 	searches *service.SearchService,
 	ai *service.AIService,
+	exports *service.ExportService,
 	transcriptionEnabled bool,
 	userID pgtype.UUID,
 	logger *slog.Logger,
@@ -60,7 +62,7 @@ func NewRouter(
 	router.Use(recoverer(logger))
 	return HandlerFromMux(&Server{
 		database: database, imports: imports, library: library, notes: notes,
-		transcriptions: transcriptions, searches: searches, ai: ai, transcriptionEnabled: transcriptionEnabled,
+		transcriptions: transcriptions, searches: searches, ai: ai, exports: exports, transcriptionEnabled: transcriptionEnabled,
 		userID: userID, logger: logger,
 	}, router)
 }
