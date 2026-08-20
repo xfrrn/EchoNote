@@ -8,6 +8,52 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Episode struct {
+	ID                  pgtype.UUID        `json:"id"`
+	UserID              pgtype.UUID        `json:"user_id"`
+	PodcastID           pgtype.UUID        `json:"podcast_id"`
+	Title               string             `json:"title"`
+	Description         string             `json:"description"`
+	PublishedAt         pgtype.Timestamptz `json:"published_at"`
+	DurationMs          int64              `json:"duration_ms"`
+	CoverUrl            string             `json:"cover_url"`
+	ResolveStatus       string             `json:"resolve_status"`
+	TranscriptionStatus string             `json:"transcription_status"`
+	AiStatus            string             `json:"ai_status"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}
+
+type EpisodeIdentityKey struct {
+	UserID      pgtype.UUID        `json:"user_id"`
+	IdentityKey string             `json:"identity_key"`
+	EpisodeID   pgtype.UUID        `json:"episode_id"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type EpisodeSource struct {
+	ID           pgtype.UUID        `json:"id"`
+	UserID       pgtype.UUID        `json:"user_id"`
+	EpisodeID    pgtype.UUID        `json:"episode_id"`
+	SourceType   string             `json:"source_type"`
+	ExternalID   *string            `json:"external_id"`
+	SourceUrl    string             `json:"source_url"`
+	CanonicalUrl string             `json:"canonical_url"`
+	AudioUrl     string             `json:"audio_url"`
+	RssGuid      *string            `json:"rss_guid"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type Import struct {
+	ID           pgtype.UUID        `json:"id"`
+	UserID       pgtype.UUID        `json:"user_id"`
+	SubmittedUrl string             `json:"submitted_url"`
+	JobID        pgtype.UUID        `json:"job_id"`
+	EpisodeID    pgtype.UUID        `json:"episode_id"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Job struct {
 	ID           pgtype.UUID        `json:"id"`
 	UserID       pgtype.UUID        `json:"user_id"`
@@ -37,4 +83,16 @@ type JobEvent struct {
 	Stage     string             `json:"stage"`
 	Data      []byte             `json:"data"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type Podcast struct {
+	ID          pgtype.UUID        `json:"id"`
+	UserID      pgtype.UUID        `json:"user_id"`
+	Title       string             `json:"title"`
+	Author      string             `json:"author"`
+	Description string             `json:"description"`
+	CoverUrl    string             `json:"cover_url"`
+	FeedUrl     *string            `json:"feed_url"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }

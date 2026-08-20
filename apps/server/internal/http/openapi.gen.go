@@ -6,9 +6,38 @@ package httpapi
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/oapi-codegen/runtime"
 )
+
+// Defines values for ImportResponseStatus.
+const (
+	Canceled  ImportResponseStatus = "canceled"
+	Failed    ImportResponseStatus = "failed"
+	Queued    ImportResponseStatus = "queued"
+	Running   ImportResponseStatus = "running"
+	Succeeded ImportResponseStatus = "succeeded"
+)
+
+// Valid indicates whether the value is a known member of the ImportResponseStatus enum.
+func (e ImportResponseStatus) Valid() bool {
+	switch e {
+	case Canceled:
+		return true
+	case Failed:
+		return true
+	case Queued:
+		return true
+	case Running:
+		return true
+	case Succeeded:
+		return true
+	default:
+		return false
+	}
+}
 
 // Defines values for ReadinessResponseDatabase.
 const (
@@ -61,6 +90,38 @@ func (e StatusResponseStatus) Valid() bool {
 	}
 }
 
+// CreateImportRequest defines model for CreateImportRequest.
+type CreateImportRequest struct {
+	Url string `json:"url"`
+}
+
+// ErrorResponse defines model for ErrorResponse.
+type ErrorResponse struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// ImportError defines model for ImportError.
+type ImportError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// ImportResponse defines model for ImportResponse.
+type ImportResponse struct {
+	CreatedAt time.Time            `json:"created_at"`
+	EpisodeId *string              `json:"episode_id,omitempty"`
+	Error     *ImportError         `json:"error,omitempty"`
+	Id        string               `json:"id"`
+	Stage     string               `json:"stage"`
+	Status    ImportResponseStatus `json:"status"`
+	UpdatedAt time.Time            `json:"updated_at"`
+	Url       string               `json:"url"`
+}
+
+// ImportResponseStatus defines model for ImportResponse.Status.
+type ImportResponseStatus string
+
 // ReadinessResponse defines model for ReadinessResponse.
 type ReadinessResponse struct {
 	Database ReadinessResponseDatabase `json:"database"`
@@ -81,8 +142,26 @@ type StatusResponse struct {
 // StatusResponseStatus defines model for StatusResponse.Status.
 type StatusResponseStatus string
 
+// BadRequest defines model for BadRequest.
+type BadRequest = ErrorResponse
+
+// InternalError defines model for InternalError.
+type InternalError = ErrorResponse
+
+// NotFound defines model for NotFound.
+type NotFound = ErrorResponse
+
+// CreateImportJSONRequestBody defines body for CreateImport for application/json ContentType.
+type CreateImportJSONRequestBody = CreateImportRequest
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// CreateImport Queue an episode import
+	// (POST /api/v1/imports)
+	CreateImport(w http.ResponseWriter, r *http.Request)
+	// GetImport Get an import result
+	// (GET /api/v1/imports/{importId})
+	GetImport(w http.ResponseWriter, r *http.Request, importId string)
 	// GetLiveness Process liveness
 	// (GET /healthz)
 	GetLiveness(w http.ResponseWriter, r *http.Request)
@@ -94,6 +173,18 @@ type ServerInterface interface {
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
+
+// CreateImport Queue an episode import
+// (POST /api/v1/imports)
+func (_ Unimplemented) CreateImport(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetImport Get an import result
+// (GET /api/v1/imports/{importId})
+func (_ Unimplemented) GetImport(w http.ResponseWriter, r *http.Request, importId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
 
 // GetLiveness Process liveness
 // (GET /healthz)
@@ -115,6 +206,46 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// CreateImport operation middleware
+func (siw *ServerInterfaceWrapper) CreateImport(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateImport(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetImport operation middleware
+func (siw *ServerInterfaceWrapper) GetImport(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "importId" -------------
+	var importId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "importId", chi.URLParam(r, "importId"), &importId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "importId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetImport(w, r, importId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // GetLiveness operation middleware
 func (siw *ServerInterfaceWrapper) GetLiveness(w http.ResponseWriter, r *http.Request) {
@@ -262,6 +393,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/readyz", wrapper.GetReadiness)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/imports", wrapper.CreateImport)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/imports/{importId}", wrapper.GetImport)
 	})
 
 	return r

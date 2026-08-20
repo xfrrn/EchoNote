@@ -15,6 +15,8 @@ import (
 type fakeQueue struct {
 	completed bool
 	retried   bool
+	retryable bool
+	errorCode string
 }
 
 func (*fakeQueue) Claim(context.Context, string, []string) (db.Job, bool, error) {
@@ -30,8 +32,10 @@ func (q *fakeQueue) Complete(context.Context, pgtype.UUID, string) error {
 	return nil
 }
 
-func (q *fakeQueue) RetryOrFail(context.Context, pgtype.UUID, string, string, string, time.Duration) (string, error) {
+func (q *fakeQueue) RetryOrFail(_ context.Context, _ pgtype.UUID, _ string, errorCode string, _ string, _ time.Duration, retryable bool) (string, error) {
 	q.retried = true
+	q.retryable = retryable
+	q.errorCode = errorCode
 	return "queued", nil
 }
 
@@ -41,14 +45,17 @@ func (*fakeQueue) RequeueStale(context.Context, time.Duration) (int, error) {
 
 func TestWorkerProcessesJobOutcome(t *testing.T) {
 	tests := []struct {
-		name         string
-		handler      Handler
-		wantComplete bool
-		wantRetry    bool
+		name          string
+		handler       Handler
+		wantComplete  bool
+		wantRetry     bool
+		wantCode      string
+		wantRetryable bool
 	}{
 		{name: "success", handler: func(context.Context, db.Job) error { return nil }, wantComplete: true},
-		{name: "failure", handler: func(context.Context, db.Job) error { return errors.New("failed") }, wantRetry: true},
-		{name: "panic", handler: func(context.Context, db.Job) error { panic("boom") }, wantRetry: true},
+		{name: "failure", handler: func(context.Context, db.Job) error { return errors.New("failed") }, wantRetry: true, wantCode: "JOB_HANDLER_FAILED", wantRetryable: true},
+		{name: "panic", handler: func(context.Context, db.Job) error { panic("boom") }, wantRetry: true, wantCode: "JOB_HANDLER_FAILED", wantRetryable: true},
+		{name: "permanent", handler: func(context.Context, db.Job) error { return classifiedError{} }, wantRetry: true, wantCode: "PERMANENT", wantRetryable: false},
 	}
 
 	for _, test := range tests {
@@ -66,6 +73,15 @@ func TestWorkerProcessesJobOutcome(t *testing.T) {
 			if queue.completed != test.wantComplete || queue.retried != test.wantRetry {
 				t.Fatalf("completed=%v retried=%v", queue.completed, queue.retried)
 			}
+			if queue.retried && (queue.errorCode != test.wantCode || queue.retryable != test.wantRetryable) {
+				t.Fatalf("errorCode=%q retryable=%v", queue.errorCode, queue.retryable)
+			}
 		})
 	}
 }
+
+type classifiedError struct{}
+
+func (classifiedError) Error() string   { return "permanent" }
+func (classifiedError) Code() string    { return "PERMANENT" }
+func (classifiedError) Retryable() bool { return false }

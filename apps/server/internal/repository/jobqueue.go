@@ -35,6 +35,12 @@ func NewJobQueue(pool *pgxpool.Pool) *JobQueue {
 }
 
 func (q *JobQueue) Enqueue(ctx context.Context, input NewJob) (db.Job, error) {
+	return withTx(ctx, q.pool, func(queries *db.Queries) (db.Job, error) {
+		return enqueue(ctx, queries, input)
+	})
+}
+
+func enqueue(ctx context.Context, queries *db.Queries, input NewJob) (db.Job, error) {
 	if len(input.Payload) == 0 {
 		input.Payload = json.RawMessage(`{}`)
 	}
@@ -45,26 +51,24 @@ func (q *JobQueue) Enqueue(ctx context.Context, input NewJob) (db.Job, error) {
 		input.RunAfter = time.Now()
 	}
 
-	return withTx(ctx, q.pool, func(queries *db.Queries) (db.Job, error) {
-		job, err := queries.EnqueueJob(ctx, db.EnqueueJobParams{
-			UserID:      input.UserID,
-			JobType:     input.Type,
-			EntityType:  input.EntityType,
-			EntityID:    input.EntityID,
-			Payload:     input.Payload,
-			Stage:       "queued",
-			Priority:    input.Priority,
-			MaxAttempts: input.MaxAttempts,
-			RunAfter:    timestamptz(input.RunAfter),
-		})
-		if err != nil {
-			return db.Job{}, fmt.Errorf("enqueue job: %w", err)
-		}
-		if err := createEvent(ctx, queries, job, "queued"); err != nil {
-			return db.Job{}, err
-		}
-		return job, nil
+	job, err := queries.EnqueueJob(ctx, db.EnqueueJobParams{
+		UserID:      input.UserID,
+		JobType:     input.Type,
+		EntityType:  input.EntityType,
+		EntityID:    input.EntityID,
+		Payload:     input.Payload,
+		Stage:       "queued",
+		Priority:    input.Priority,
+		MaxAttempts: input.MaxAttempts,
+		RunAfter:    timestamptz(input.RunAfter),
 	})
+	if err != nil {
+		return db.Job{}, fmt.Errorf("enqueue job: %w", err)
+	}
+	if err := createEvent(ctx, queries, job, "queued"); err != nil {
+		return db.Job{}, err
+	}
+	return job, nil
 }
 
 func (q *JobQueue) Claim(ctx context.Context, workerID string, jobTypes []string) (db.Job, bool, error) {
@@ -138,10 +142,12 @@ func (q *JobQueue) RetryOrFail(
 	errorCode string,
 	errorMessage string,
 	retryDelay time.Duration,
+	retryable bool,
 ) (string, error) {
 	job, err := withTx(ctx, q.pool, func(queries *db.Queries) (db.Job, error) {
 		job, err := queries.RetryOrFailJob(ctx, db.RetryOrFailJobParams{
 			RetryDelayMilliseconds: durationMilliseconds(retryDelay),
+			Retryable:              retryable,
 			ErrorCode:              &errorCode,
 			ErrorMessage:           &errorMessage,
 			JobID:                  jobID,

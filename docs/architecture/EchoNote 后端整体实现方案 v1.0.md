@@ -1,5 +1,7 @@
 # EchoNote 后端整体实现方案 v1.0
 
+> 实施记录：当前任务把原推荐“第二阶段”拆成独立的 Import、Library、Notes Phase。Import 的实际边界、数据库并发去重、安全策略和设计调整见 [`phase-2-import.md`](phase-2-import.md)。
+
 ## 1. 后端定位
 
 EchoNote 不是播客播放器，其后端不负责：

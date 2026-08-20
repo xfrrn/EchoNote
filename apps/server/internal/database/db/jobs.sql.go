@@ -375,26 +375,27 @@ func (q *Queries) RequeueStaleJobs(ctx context.Context, leaseMilliseconds int64)
 
 const retryOrFailJob = `-- name: RetryOrFailJob :one
 UPDATE jobs
-SET status = CASE WHEN attempt < max_attempts THEN 'queued' ELSE 'failed' END,
-    stage = CASE WHEN attempt < max_attempts THEN 'retry_wait' ELSE 'failed' END,
+SET status = CASE WHEN $1::boolean AND attempt < max_attempts THEN 'queued' ELSE 'failed' END,
+    stage = CASE WHEN $1::boolean AND attempt < max_attempts THEN 'retry_wait' ELSE 'failed' END,
     run_after = CASE
-        WHEN attempt < max_attempts
-        THEN now() + ($1::bigint * interval '1 millisecond')
+        WHEN $1::boolean AND attempt < max_attempts
+        THEN now() + ($2::bigint * interval '1 millisecond')
         ELSE run_after
     END,
     locked_by = NULL,
     locked_at = NULL,
-    error_code = $2,
-    error_message = $3,
+    error_code = $3,
+    error_message = $4,
     updated_at = now(),
-    completed_at = CASE WHEN attempt < max_attempts THEN NULL ELSE now() END
-WHERE id = $4
+    completed_at = CASE WHEN $1::boolean AND attempt < max_attempts THEN NULL ELSE now() END
+WHERE id = $5
   AND status = 'running'
-  AND locked_by = $5
+  AND locked_by = $6
 RETURNING id, user_id, type, entity_type, entity_id, payload, status, stage, priority, attempt, max_attempts, run_after, locked_by, locked_at, error_code, error_message, created_at, updated_at, completed_at
 `
 
 type RetryOrFailJobParams struct {
+	Retryable              bool        `json:"retryable"`
 	RetryDelayMilliseconds int64       `json:"retry_delay_milliseconds"`
 	ErrorCode              *string     `json:"error_code"`
 	ErrorMessage           *string     `json:"error_message"`
@@ -404,6 +405,7 @@ type RetryOrFailJobParams struct {
 
 func (q *Queries) RetryOrFailJob(ctx context.Context, arg RetryOrFailJobParams) (Job, error) {
 	row := q.db.QueryRow(ctx, retryOrFailJob,
+		arg.Retryable,
 		arg.RetryDelayMilliseconds,
 		arg.ErrorCode,
 		arg.ErrorMessage,

@@ -13,6 +13,7 @@ func TestLoad(t *testing.T) {
 	t.Setenv("LOG_LEVEL", "debug")
 	t.Setenv("WORKER_POLL_INTERVAL", "250ms")
 	t.Setenv("WORKER_LEASE_TIMEOUT", "2m")
+	t.Setenv("ECHONOTE_USER_ID", "fb48ddae-0ac8-4fb3-9e1a-f293ff938ed2")
 
 	cfg, err := Load()
 	if err != nil {
@@ -23,6 +24,17 @@ func TestLoad(t *testing.T) {
 	}
 	if cfg.WorkerPollInterval != 250*time.Millisecond || cfg.WorkerLeaseTimeout != 2*time.Minute {
 		t.Fatalf("unexpected worker config: %+v", cfg)
+	}
+	if !cfg.UserID.Valid {
+		t.Fatal("expected ECHONOTE_USER_ID to be parsed")
+	}
+}
+
+func TestLoadRejectsInvalidUserID(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://localhost/echonote")
+	t.Setenv("ECHONOTE_USER_ID", "not-a-uuid")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected invalid ECHONOTE_USER_ID to fail")
 	}
 }
 

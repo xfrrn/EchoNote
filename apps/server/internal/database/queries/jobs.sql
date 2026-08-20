@@ -72,10 +72,10 @@ RETURNING *;
 
 -- name: RetryOrFailJob :one
 UPDATE jobs
-SET status = CASE WHEN attempt < max_attempts THEN 'queued' ELSE 'failed' END,
-    stage = CASE WHEN attempt < max_attempts THEN 'retry_wait' ELSE 'failed' END,
+SET status = CASE WHEN sqlc.arg(retryable)::boolean AND attempt < max_attempts THEN 'queued' ELSE 'failed' END,
+    stage = CASE WHEN sqlc.arg(retryable)::boolean AND attempt < max_attempts THEN 'retry_wait' ELSE 'failed' END,
     run_after = CASE
-        WHEN attempt < max_attempts
+        WHEN sqlc.arg(retryable)::boolean AND attempt < max_attempts
         THEN now() + (sqlc.arg(retry_delay_milliseconds)::bigint * interval '1 millisecond')
         ELSE run_after
     END,
@@ -84,7 +84,7 @@ SET status = CASE WHEN attempt < max_attempts THEN 'queued' ELSE 'failed' END,
     error_code = sqlc.arg(error_code),
     error_message = sqlc.arg(error_message),
     updated_at = now(),
-    completed_at = CASE WHEN attempt < max_attempts THEN NULL ELSE now() END
+    completed_at = CASE WHEN sqlc.arg(retryable)::boolean AND attempt < max_attempts THEN NULL ELSE now() END
 WHERE id = sqlc.arg(job_id)
   AND status = 'running'
   AND locked_by = sqlc.arg(worker_id)

@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type pingerFunc func(context.Context) error
@@ -33,7 +35,7 @@ func TestHealthEndpoints(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			router := NewRouter(pingerFunc(func(context.Context) error { return test.pingError }), logger)
+			router := NewRouter(pingerFunc(func(context.Context) error { return test.pingError }), nil, pgtype.UUID{}, logger)
 			request := httptest.NewRequest(http.MethodGet, test.path, nil)
 			response := httptest.NewRecorder()
 			router.ServeHTTP(response, request)
@@ -51,5 +53,28 @@ func TestHealthEndpoints(t *testing.T) {
 				t.Fatalf("Content-Type = %q", response.Header().Get("Content-Type"))
 			}
 		})
+	}
+}
+
+func TestImportRejectsInvalidInputBeforeDatabase(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	router := NewRouter(pingerFunc(func(context.Context) error { return nil }), nil, pgtype.UUID{}, logger)
+	tests := []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{method: http.MethodPost, path: "/api/v1/imports", body: `{"url":"file:///tmp/audio.mp3"}`},
+		{method: http.MethodPost, path: "/api/v1/imports", body: `{"url":"https://example.com","extra":true}`},
+		{method: http.MethodGet, path: "/api/v1/imports/not-a-uuid"},
+	}
+	for _, test := range tests {
+		request := httptest.NewRequest(test.method, test.path, strings.NewReader(test.body))
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("%s %s status=%d body=%s", test.method, test.path, response.Code, response.Body.String())
+		}
 	}
 }

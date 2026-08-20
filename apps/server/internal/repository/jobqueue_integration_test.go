@@ -86,7 +86,7 @@ func TestJobQueueLifecycle(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("first retry claim found=%v err=%v", found, err)
 	}
-	status, err := queue.RetryOrFail(ctx, firstAttempt.ID, "worker-test", "TEST_ERROR", "retry once", time.Millisecond)
+	status, err := queue.RetryOrFail(ctx, firstAttempt.ID, "worker-test", "TEST_ERROR", "retry once", time.Millisecond, true)
 	if err != nil || status != "queued" {
 		t.Fatalf("first failure status=%q err=%v", status, err)
 	}
@@ -96,7 +96,7 @@ func TestJobQueueLifecycle(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("second retry claim found=%v err=%v", found, err)
 	}
-	status, err = queue.RetryOrFail(ctx, secondAttempt.ID, "worker-test", "TEST_ERROR", "attempts exhausted", time.Millisecond)
+	status, err = queue.RetryOrFail(ctx, secondAttempt.ID, "worker-test", "TEST_ERROR", "attempts exhausted", time.Millisecond, true)
 	if err != nil || status != "failed" {
 		t.Fatalf("final failure status=%q err=%v", status, err)
 	}
@@ -106,6 +106,23 @@ func TestJobQueueLifecycle(t *testing.T) {
 	}
 	if len(retryEvents) != 5 {
 		t.Fatalf("retry events=%d, want 5", len(retryEvents))
+	}
+
+	permanentJob, err := queue.Enqueue(ctx, NewJob{
+		Type: jobType + "_permanent", EntityType: "phase1_test", EntityID: randomUUID(t), MaxAttempts: 3,
+		RunAfter: time.Now().Add(-time.Second),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _, _ = pool.Exec(context.Background(), "DELETE FROM jobs WHERE id = $1", permanentJob.ID) }()
+	permanentAttempt, found, err := queue.Claim(ctx, "worker-test", []string{jobType + "_permanent"})
+	if err != nil || !found {
+		t.Fatalf("permanent claim found=%v err=%v", found, err)
+	}
+	status, err = queue.RetryOrFail(ctx, permanentAttempt.ID, "worker-test", "PERMANENT", "do not retry", time.Millisecond, false)
+	if err != nil || status != "failed" {
+		t.Fatalf("permanent failure status=%q err=%v", status, err)
 	}
 }
 

@@ -16,6 +16,7 @@ import (
 	"github.com/Actify/echonote/apps/server/internal/database"
 	httpapi "github.com/Actify/echonote/apps/server/internal/http"
 	"github.com/Actify/echonote/apps/server/internal/logging"
+	"github.com/Actify/echonote/apps/server/internal/repository"
 )
 
 func main() {
@@ -44,7 +45,7 @@ func run() error {
 
 	server := &http.Server{
 		Addr:              ":" + strconv.Itoa(cfg.ServerPort),
-		Handler:           httpapi.NewRouter(pool, logger),
+		Handler:           httpapi.NewRouter(pool, repository.NewImportRepository(pool), cfg.UserID, logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}

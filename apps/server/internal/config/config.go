@@ -7,7 +7,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const defaultUserID = "00000000-0000-4000-8000-000000000001"
 
 type Config struct {
 	Environment        string
@@ -16,6 +20,7 @@ type Config struct {
 	LogLevel           slog.Level
 	WorkerPollInterval time.Duration
 	WorkerLeaseTimeout time.Duration
+	UserID             pgtype.UUID
 }
 
 func Load() (Config, error) {
@@ -31,6 +36,9 @@ func Load() (Config, error) {
 	}
 	if cfg.DatabaseURL == "" {
 		return Config{}, fmt.Errorf("DATABASE_URL is required")
+	}
+	if err := cfg.UserID.Scan(envOrDefault("ECHONOTE_USER_ID", defaultUserID)); err != nil {
+		return Config{}, fmt.Errorf("ECHONOTE_USER_ID must be a UUID")
 	}
 
 	port, err := strconv.Atoi(envOrDefault("SERVER_PORT", "8080"))

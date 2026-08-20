@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"runtime/debug"
@@ -18,7 +19,7 @@ type Queue interface {
 	Claim(context.Context, string, []string) (db.Job, bool, error)
 	Heartbeat(context.Context, pgtype.UUID, string) error
 	Complete(context.Context, pgtype.UUID, string) error
-	RetryOrFail(context.Context, pgtype.UUID, string, string, string, time.Duration) (string, error)
+	RetryOrFail(context.Context, pgtype.UUID, string, string, string, time.Duration, bool) (string, error)
 	RequeueStale(context.Context, time.Duration) (int, error)
 }
 
@@ -128,19 +129,32 @@ func (w *Worker) process(ctx context.Context, job db.Job) {
 				return
 			}
 
+			errorCode := "JOB_HANDLER_FAILED"
+			errorMessage := "job handler failed"
+			retryable := true
+			var classified interface {
+				Code() string
+				Retryable() bool
+			}
+			if errors.As(err, &classified) {
+				errorCode = classified.Code()
+				errorMessage = err.Error()
+				retryable = classified.Retryable()
+			}
 			status, transitionErr := w.queue.RetryOrFail(
 				transitionContext,
 				job.ID,
 				w.workerID,
-				"JOB_HANDLER_FAILED",
-				err.Error(),
+				errorCode,
+				errorMessage,
 				retryDelay,
+				retryable,
 			)
 			if transitionErr != nil {
 				w.logger.Error("record job failure", "job_id", jobID, "job_type", job.Type, "error", transitionErr)
 				return
 			}
-			w.logger.Warn("job handler failed", "job_id", jobID, "job_type", job.Type, "status", status, "error", err)
+			w.logger.Warn("job handler failed", "job_id", jobID, "job_type", job.Type, "status", status, "error", err, "cause", errors.Unwrap(err))
 			return
 		case <-heartbeat.C:
 			heartbeatContext, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)

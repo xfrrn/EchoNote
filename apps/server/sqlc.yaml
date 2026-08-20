@@ -1,7 +1,9 @@
 version: "2"
 sql:
   - engine: postgresql
-    schema: migrations/000001_phase1.up.sql
+    schema:
+      - migrations/000001_phase1.up.sql
+      - migrations/000002_imports.up.sql
     queries: internal/database/queries
     gen:
       go:

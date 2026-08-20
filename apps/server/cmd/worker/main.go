@@ -13,7 +13,9 @@ import (
 	"github.com/Actify/echonote/apps/server/internal/config"
 	"github.com/Actify/echonote/apps/server/internal/database"
 	"github.com/Actify/echonote/apps/server/internal/logging"
+	podcastprovider "github.com/Actify/echonote/apps/server/internal/provider/podcast"
 	"github.com/Actify/echonote/apps/server/internal/repository"
+	"github.com/Actify/echonote/apps/server/internal/service"
 	workerapp "github.com/Actify/echonote/apps/server/internal/worker"
 )
 
@@ -44,13 +46,19 @@ func run() error {
 	hostname, _ := os.Hostname()
 	workerID := hostname + "-" + strconv.Itoa(os.Getpid())
 	queue := repository.NewJobQueue(pool)
+	imports := repository.NewImportRepository(pool)
+	httpClient := podcastprovider.NewHTTPClient()
+	defer httpClient.CloseIdleConnections()
+	resolver := podcastprovider.NewResolver(httpClient)
 	process := workerapp.New(
 		queue,
 		logger,
 		workerID,
 		cfg.WorkerPollInterval,
 		cfg.WorkerLeaseTimeout,
-		map[string]workerapp.Handler{},
+		map[string]workerapp.Handler{
+			repository.ResolveEpisodeJobType: service.NewResolveImportHandler(imports, resolver),
+		},
 	)
 	return process.Run(ctx)
 }
