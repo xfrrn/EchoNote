@@ -35,7 +35,7 @@ func TestHealthEndpoints(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			router := NewRouter(pingerFunc(func(context.Context) error { return test.pingError }), nil, pgtype.UUID{}, logger)
+			router := NewRouter(pingerFunc(func(context.Context) error { return test.pingError }), nil, nil, pgtype.UUID{}, logger)
 			request := httptest.NewRequest(http.MethodGet, test.path, nil)
 			response := httptest.NewRecorder()
 			router.ServeHTTP(response, request)
@@ -58,7 +58,7 @@ func TestHealthEndpoints(t *testing.T) {
 
 func TestImportRejectsInvalidInputBeforeDatabase(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	router := NewRouter(pingerFunc(func(context.Context) error { return nil }), nil, pgtype.UUID{}, logger)
+	router := NewRouter(pingerFunc(func(context.Context) error { return nil }), nil, nil, pgtype.UUID{}, logger)
 	tests := []struct {
 		method string
 		path   string
@@ -71,6 +71,29 @@ func TestImportRejectsInvalidInputBeforeDatabase(t *testing.T) {
 	for _, test := range tests {
 		request := httptest.NewRequest(test.method, test.path, strings.NewReader(test.body))
 		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("%s %s status=%d body=%s", test.method, test.path, response.Code, response.Body.String())
+		}
+	}
+}
+
+func TestLibraryRejectsInvalidParametersBeforeDatabase(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	router := NewRouter(pingerFunc(func(context.Context) error { return nil }), nil, nil, pgtype.UUID{}, logger)
+	tests := []struct {
+		method string
+		path   string
+	}{
+		{method: http.MethodGet, path: "/api/v1/episodes?limit=0"},
+		{method: http.MethodGet, path: "/api/v1/episodes?limit=101"},
+		{method: http.MethodGet, path: "/api/v1/episodes?offset=-1"},
+		{method: http.MethodGet, path: "/api/v1/episodes/not-a-uuid"},
+		{method: http.MethodDelete, path: "/api/v1/episodes/not-a-uuid"},
+	}
+	for _, test := range tests {
+		request := httptest.NewRequest(test.method, test.path, nil)
 		response := httptest.NewRecorder()
 		router.ServeHTTP(response, request)
 		if response.Code != http.StatusBadRequest {

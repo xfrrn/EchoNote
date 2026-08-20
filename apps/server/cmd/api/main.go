@@ -44,8 +44,14 @@ func run() error {
 	defer pool.Close()
 
 	server := &http.Server{
-		Addr:              ":" + strconv.Itoa(cfg.ServerPort),
-		Handler:           httpapi.NewRouter(pool, repository.NewImportRepository(pool), cfg.UserID, logger),
+		Addr: ":" + strconv.Itoa(cfg.ServerPort),
+		Handler: httpapi.NewRouter(
+			pool,
+			repository.NewImportRepository(pool),
+			repository.NewLibraryRepository(pool),
+			cfg.UserID,
+			logger,
+		),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}

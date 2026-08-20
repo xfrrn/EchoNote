@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: EchoNote API
-  version: 0.2.0
+  version: 0.3.0
   description: EchoNote modular-monolith HTTP API.
 paths:
   /healthz:
@@ -85,6 +85,80 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ImportResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/episodes:
+    get:
+      operationId: listEpisodes
+      summary: List recently imported episodes
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 2147483647
+            default: 0
+      responses:
+        "200":
+          description: User-scoped Episode page.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EpisodeListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/episodes/{episodeId}:
+    parameters:
+      - name: episodeId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: getEpisode
+      summary: Get an Episode with Podcast and Sources
+      responses:
+        "200":
+          description: Episode detail.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EpisodeDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      operationId: deleteEpisode
+      summary: Permanently delete an Episode
+      responses:
+        "204":
+          description: Episode deleted.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
         "400":
           $ref: "#/components/responses/BadRequest"
         "404":
@@ -193,6 +267,194 @@ components:
           type: string
         message:
           type: string
+    ResolveStatus:
+      type: string
+      enum:
+        - pending
+        - completed
+        - failed
+    ProcessingStatus:
+      type: string
+      enum:
+        - waiting
+        - queued
+        - running
+        - completed
+        - failed
+    SourceType:
+      type: string
+      enum:
+        - apple_podcasts
+        - rss
+        - direct_audio
+    PodcastSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - title
+        - author
+        - description
+        - cover_url
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        author:
+          type: string
+        description:
+          type: string
+        cover_url:
+          type: string
+        feed_url:
+          type: string
+    EpisodeSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - title
+        - duration_ms
+        - cover_url
+        - resolve_status
+        - transcription_status
+        - ai_status
+        - source_count
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+        podcast:
+          $ref: "#/components/schemas/PodcastSummary"
+        title:
+          type: string
+        published_at:
+          type: string
+          format: date-time
+        duration_ms:
+          type: integer
+          format: int64
+          minimum: 0
+        cover_url:
+          type: string
+        resolve_status:
+          $ref: "#/components/schemas/ResolveStatus"
+        transcription_status:
+          $ref: "#/components/schemas/ProcessingStatus"
+        ai_status:
+          $ref: "#/components/schemas/ProcessingStatus"
+        source_count:
+          type: integer
+          format: int64
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    EpisodeSource:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - source_type
+        - source_url
+        - canonical_url
+        - created_at
+      properties:
+        id:
+          type: string
+        source_type:
+          $ref: "#/components/schemas/SourceType"
+        external_id:
+          type: string
+        source_url:
+          type: string
+        canonical_url:
+          type: string
+        rss_guid:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    EpisodeDetail:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - title
+        - description
+        - duration_ms
+        - cover_url
+        - resolve_status
+        - transcription_status
+        - ai_status
+        - source_count
+        - sources
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+        podcast:
+          $ref: "#/components/schemas/PodcastSummary"
+        title:
+          type: string
+        description:
+          type: string
+        published_at:
+          type: string
+          format: date-time
+        duration_ms:
+          type: integer
+          format: int64
+          minimum: 0
+        cover_url:
+          type: string
+        resolve_status:
+          $ref: "#/components/schemas/ResolveStatus"
+        transcription_status:
+          $ref: "#/components/schemas/ProcessingStatus"
+        ai_status:
+          $ref: "#/components/schemas/ProcessingStatus"
+        source_count:
+          type: integer
+          format: int64
+          minimum: 0
+        sources:
+          type: array
+          items:
+            $ref: "#/components/schemas/EpisodeSource"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    EpisodeListResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - total
+        - limit
+        - offset
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/EpisodeSummary"
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+        limit:
+          type: integer
+        offset:
+          type: integer
     StatusResponse:
       type: object
       additionalProperties: false

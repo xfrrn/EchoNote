@@ -147,4 +147,4 @@ Apple source + RSS source
 
 ## 下一阶段入口
 
-Phase 3 在现有 `podcasts`、`episodes`、`episode_sources` 上实现 Library 查询、详情、删除与三个独立状态的展示，不需要重做 Import。
+Phase 3 已在现有 `podcasts`、`episodes`、`episode_sources` 上完成 Library 查询、详情、删除与三个独立状态的展示，见 [`phase-3-library.md`](phase-3-library.md)。

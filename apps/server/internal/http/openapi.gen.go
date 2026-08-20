@@ -4,6 +4,7 @@
 package httpapi
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -14,25 +15,52 @@ import (
 
 // Defines values for ImportResponseStatus.
 const (
-	Canceled  ImportResponseStatus = "canceled"
-	Failed    ImportResponseStatus = "failed"
-	Queued    ImportResponseStatus = "queued"
-	Running   ImportResponseStatus = "running"
-	Succeeded ImportResponseStatus = "succeeded"
+	ImportResponseStatusCanceled  ImportResponseStatus = "canceled"
+	ImportResponseStatusFailed    ImportResponseStatus = "failed"
+	ImportResponseStatusQueued    ImportResponseStatus = "queued"
+	ImportResponseStatusRunning   ImportResponseStatus = "running"
+	ImportResponseStatusSucceeded ImportResponseStatus = "succeeded"
 )
 
 // Valid indicates whether the value is a known member of the ImportResponseStatus enum.
 func (e ImportResponseStatus) Valid() bool {
 	switch e {
-	case Canceled:
+	case ImportResponseStatusCanceled:
 		return true
-	case Failed:
+	case ImportResponseStatusFailed:
 		return true
-	case Queued:
+	case ImportResponseStatusQueued:
 		return true
-	case Running:
+	case ImportResponseStatusRunning:
 		return true
-	case Succeeded:
+	case ImportResponseStatusSucceeded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProcessingStatus.
+const (
+	ProcessingStatusCompleted ProcessingStatus = "completed"
+	ProcessingStatusFailed    ProcessingStatus = "failed"
+	ProcessingStatusQueued    ProcessingStatus = "queued"
+	ProcessingStatusRunning   ProcessingStatus = "running"
+	ProcessingStatusWaiting   ProcessingStatus = "waiting"
+)
+
+// Valid indicates whether the value is a known member of the ProcessingStatus enum.
+func (e ProcessingStatus) Valid() bool {
+	switch e {
+	case ProcessingStatusCompleted:
+		return true
+	case ProcessingStatusFailed:
+		return true
+	case ProcessingStatusQueued:
+		return true
+	case ProcessingStatusRunning:
+		return true
+	case ProcessingStatusWaiting:
 		return true
 	default:
 		return false
@@ -75,6 +103,48 @@ func (e ReadinessResponseStatus) Valid() bool {
 	}
 }
 
+// Defines values for ResolveStatus.
+const (
+	ResolveStatusCompleted ResolveStatus = "completed"
+	ResolveStatusFailed    ResolveStatus = "failed"
+	ResolveStatusPending   ResolveStatus = "pending"
+)
+
+// Valid indicates whether the value is a known member of the ResolveStatus enum.
+func (e ResolveStatus) Valid() bool {
+	switch e {
+	case ResolveStatusCompleted:
+		return true
+	case ResolveStatusFailed:
+		return true
+	case ResolveStatusPending:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SourceType.
+const (
+	ApplePodcasts SourceType = "apple_podcasts"
+	DirectAudio   SourceType = "direct_audio"
+	Rss           SourceType = "rss"
+)
+
+// Valid indicates whether the value is a known member of the SourceType enum.
+func (e SourceType) Valid() bool {
+	switch e {
+	case ApplePodcasts:
+		return true
+	case DirectAudio:
+		return true
+	case Rss:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for StatusResponseStatus.
 const (
 	StatusResponseStatusOk StatusResponseStatus = "ok"
@@ -93,6 +163,59 @@ func (e StatusResponseStatus) Valid() bool {
 // CreateImportRequest defines model for CreateImportRequest.
 type CreateImportRequest struct {
 	Url string `json:"url"`
+}
+
+// EpisodeDetail defines model for EpisodeDetail.
+type EpisodeDetail struct {
+	AiStatus            ProcessingStatus `json:"ai_status"`
+	CoverUrl            string           `json:"cover_url"`
+	CreatedAt           time.Time        `json:"created_at"`
+	Description         string           `json:"description"`
+	DurationMs          int64            `json:"duration_ms"`
+	Id                  string           `json:"id"`
+	Podcast             *PodcastSummary  `json:"podcast,omitempty"`
+	PublishedAt         *time.Time       `json:"published_at,omitempty"`
+	ResolveStatus       ResolveStatus    `json:"resolve_status"`
+	SourceCount         int64            `json:"source_count"`
+	Sources             []EpisodeSource  `json:"sources"`
+	Title               string           `json:"title"`
+	TranscriptionStatus ProcessingStatus `json:"transcription_status"`
+	UpdatedAt           time.Time        `json:"updated_at"`
+}
+
+// EpisodeListResponse defines model for EpisodeListResponse.
+type EpisodeListResponse struct {
+	Items  []EpisodeSummary `json:"items"`
+	Limit  int              `json:"limit"`
+	Offset int              `json:"offset"`
+	Total  int64            `json:"total"`
+}
+
+// EpisodeSource defines model for EpisodeSource.
+type EpisodeSource struct {
+	CanonicalUrl string     `json:"canonical_url"`
+	CreatedAt    time.Time  `json:"created_at"`
+	ExternalId   *string    `json:"external_id,omitempty"`
+	Id           string     `json:"id"`
+	RssGuid      *string    `json:"rss_guid,omitempty"`
+	SourceType   SourceType `json:"source_type"`
+	SourceUrl    string     `json:"source_url"`
+}
+
+// EpisodeSummary defines model for EpisodeSummary.
+type EpisodeSummary struct {
+	AiStatus            ProcessingStatus `json:"ai_status"`
+	CoverUrl            string           `json:"cover_url"`
+	CreatedAt           time.Time        `json:"created_at"`
+	DurationMs          int64            `json:"duration_ms"`
+	Id                  string           `json:"id"`
+	Podcast             *PodcastSummary  `json:"podcast,omitempty"`
+	PublishedAt         *time.Time       `json:"published_at,omitempty"`
+	ResolveStatus       ResolveStatus    `json:"resolve_status"`
+	SourceCount         int64            `json:"source_count"`
+	Title               string           `json:"title"`
+	TranscriptionStatus ProcessingStatus `json:"transcription_status"`
+	UpdatedAt           time.Time        `json:"updated_at"`
 }
 
 // ErrorResponse defines model for ErrorResponse.
@@ -122,6 +245,19 @@ type ImportResponse struct {
 // ImportResponseStatus defines model for ImportResponse.Status.
 type ImportResponseStatus string
 
+// PodcastSummary defines model for PodcastSummary.
+type PodcastSummary struct {
+	Author      string  `json:"author"`
+	CoverUrl    string  `json:"cover_url"`
+	Description string  `json:"description"`
+	FeedUrl     *string `json:"feed_url,omitempty"`
+	Id          string  `json:"id"`
+	Title       string  `json:"title"`
+}
+
+// ProcessingStatus defines model for ProcessingStatus.
+type ProcessingStatus string
+
 // ReadinessResponse defines model for ReadinessResponse.
 type ReadinessResponse struct {
 	Database ReadinessResponseDatabase `json:"database"`
@@ -133,6 +269,12 @@ type ReadinessResponseDatabase string
 
 // ReadinessResponseStatus defines model for ReadinessResponse.Status.
 type ReadinessResponseStatus string
+
+// ResolveStatus defines model for ResolveStatus.
+type ResolveStatus string
+
+// SourceType defines model for SourceType.
+type SourceType string
 
 // StatusResponse defines model for StatusResponse.
 type StatusResponse struct {
@@ -151,11 +293,26 @@ type InternalError = ErrorResponse
 // NotFound defines model for NotFound.
 type NotFound = ErrorResponse
 
+// ListEpisodesParams defines parameters for ListEpisodes.
+type ListEpisodesParams struct {
+	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
 // CreateImportJSONRequestBody defines body for CreateImport for application/json ContentType.
 type CreateImportJSONRequestBody = CreateImportRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// ListEpisodes List recently imported episodes
+	// (GET /api/v1/episodes)
+	ListEpisodes(w http.ResponseWriter, r *http.Request, params ListEpisodesParams)
+	// DeleteEpisode Permanently delete an Episode
+	// (DELETE /api/v1/episodes/{episodeId})
+	DeleteEpisode(w http.ResponseWriter, r *http.Request, episodeId string)
+	// GetEpisode Get an Episode with Podcast and Sources
+	// (GET /api/v1/episodes/{episodeId})
+	GetEpisode(w http.ResponseWriter, r *http.Request, episodeId string)
 	// CreateImport Queue an episode import
 	// (POST /api/v1/imports)
 	CreateImport(w http.ResponseWriter, r *http.Request)
@@ -173,6 +330,24 @@ type ServerInterface interface {
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
+
+// ListEpisodes List recently imported episodes
+// (GET /api/v1/episodes)
+func (_ Unimplemented) ListEpisodes(w http.ResponseWriter, r *http.Request, params ListEpisodesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// DeleteEpisode Permanently delete an Episode
+// (DELETE /api/v1/episodes/{episodeId})
+func (_ Unimplemented) DeleteEpisode(w http.ResponseWriter, r *http.Request, episodeId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetEpisode Get an Episode with Podcast and Sources
+// (GET /api/v1/episodes/{episodeId})
+func (_ Unimplemented) GetEpisode(w http.ResponseWriter, r *http.Request, episodeId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
 
 // CreateImport Queue an episode import
 // (POST /api/v1/imports)
@@ -206,6 +381,104 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// ListEpisodes operation middleware
+func (siw *ServerInterfaceWrapper) ListEpisodes(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListEpisodesParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListEpisodes(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteEpisode operation middleware
+func (siw *ServerInterfaceWrapper) DeleteEpisode(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "episodeId" -------------
+	var episodeId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "episodeId", chi.URLParam(r, "episodeId"), &episodeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "episodeId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteEpisode(w, r, episodeId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetEpisode operation middleware
+func (siw *ServerInterfaceWrapper) GetEpisode(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "episodeId" -------------
+	var episodeId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "episodeId", chi.URLParam(r, "episodeId"), &episodeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "episodeId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetEpisode(w, r, episodeId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // CreateImport operation middleware
 func (siw *ServerInterfaceWrapper) CreateImport(w http.ResponseWriter, r *http.Request) {
@@ -399,6 +672,15 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/imports/{importId}", wrapper.GetImport)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/episodes", wrapper.ListEpisodes)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/api/v1/episodes/{episodeId}", wrapper.DeleteEpisode)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/episodes/{episodeId}", wrapper.GetEpisode)
 	})
 
 	return r

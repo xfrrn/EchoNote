@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/url"
 	"runtime/debug"
@@ -28,18 +29,87 @@ type Pinger interface {
 type Server struct {
 	database Pinger
 	imports  *repository.ImportRepository
+	library  *repository.LibraryRepository
 	userID   pgtype.UUID
 	logger   *slog.Logger
 }
 
 var _ ServerInterface = (*Server)(nil)
 
-func NewRouter(database Pinger, imports *repository.ImportRepository, userID pgtype.UUID, logger *slog.Logger) http.Handler {
+func NewRouter(
+	database Pinger,
+	imports *repository.ImportRepository,
+	library *repository.LibraryRepository,
+	userID pgtype.UUID,
+	logger *slog.Logger,
+) http.Handler {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
 	router.Use(requestLogger(logger, formatUUID(userID)))
 	router.Use(recoverer(logger))
-	return HandlerFromMux(&Server{database: database, imports: imports, userID: userID, logger: logger}, router)
+	return HandlerFromMux(&Server{database: database, imports: imports, library: library, userID: userID, logger: logger}, router)
+}
+
+func (s *Server) ListEpisodes(w http.ResponseWriter, r *http.Request, params ListEpisodesParams) {
+	limit, offset := 50, 0
+	if params.Limit != nil {
+		limit = *params.Limit
+	}
+	if params.Offset != nil {
+		offset = *params.Offset
+	}
+	if limit < 1 || limit > 100 || offset < 0 || offset > math.MaxInt32 {
+		writeAPIError(w, http.StatusBadRequest, "INVALID_PAGINATION", "limit must be 1-100 and offset must be non-negative")
+		return
+	}
+	rows, total, err := s.library.List(r.Context(), s.userID, int32(limit), int32(offset))
+	if err != nil {
+		s.logger.ErrorContext(r.Context(), "list episodes", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(s.userID), "error", err)
+		writeAPIError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
+		return
+	}
+	items := make([]EpisodeSummary, len(rows))
+	for index, row := range rows {
+		items[index] = episodeSummary(row)
+	}
+	writeJSON(w, http.StatusOK, EpisodeListResponse{Items: items, Total: total, Limit: limit, Offset: offset})
+}
+
+func (s *Server) GetEpisode(w http.ResponseWriter, r *http.Request, episodeID string) {
+	parsedID, err := parseUUID(episodeID)
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, "INVALID_EPISODE_ID", "episodeId must be a UUID")
+		return
+	}
+	detail, err := s.library.Get(r.Context(), s.userID, parsedID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeAPIError(w, http.StatusNotFound, "EPISODE_NOT_FOUND", "episode was not found")
+		return
+	}
+	if err != nil {
+		s.logger.ErrorContext(r.Context(), "get episode", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(s.userID), "episode_id", episodeID, "error", err)
+		writeAPIError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
+		return
+	}
+	writeJSON(w, http.StatusOK, episodeDetail(detail))
+}
+
+func (s *Server) DeleteEpisode(w http.ResponseWriter, r *http.Request, episodeID string) {
+	parsedID, err := parseUUID(episodeID)
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, "INVALID_EPISODE_ID", "episodeId must be a UUID")
+		return
+	}
+	if err := s.library.Delete(r.Context(), s.userID, parsedID); errors.Is(err, pgx.ErrNoRows) {
+		writeAPIError(w, http.StatusNotFound, "EPISODE_NOT_FOUND", "episode was not found")
+		return
+	} else if err != nil {
+		s.logger.ErrorContext(r.Context(), "delete episode", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(s.userID), "episode_id", episodeID, "error", err)
+		writeAPIError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
+		return
+	}
+	s.logger.InfoContext(r.Context(), "episode deleted", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(s.userID), "episode_id", episodeID)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) CreateImport(w http.ResponseWriter, r *http.Request) {
@@ -64,8 +134,8 @@ func (s *Server) CreateImport(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) GetImport(w http.ResponseWriter, r *http.Request, importID string) {
-	var parsedID pgtype.UUID
-	if err := parsedID.Scan(importID); err != nil {
+	parsedID, err := parseUUID(importID)
+	if err != nil {
 		writeAPIError(w, http.StatusBadRequest, "INVALID_IMPORT_ID", "importId must be a UUID")
 		return
 	}
@@ -165,6 +235,76 @@ func importResponse(status db.GetImportStatusRow) ImportResponse {
 	return response
 }
 
+func episodeSummary(row db.ListLibraryEpisodesRow) EpisodeSummary {
+	response := EpisodeSummary{
+		Id: formatUUID(row.ID), Podcast: podcastSummary(
+			row.PodcastID, row.PodcastTitle, row.PodcastAuthor, row.PodcastDescription, row.PodcastCoverUrl, row.PodcastFeedUrl,
+		),
+		Title: row.Title, DurationMs: row.DurationMs, CoverUrl: episodeCover(row.CoverUrl, row.PodcastCoverUrl),
+		ResolveStatus: ResolveStatus(row.ResolveStatus), TranscriptionStatus: ProcessingStatus(row.TranscriptionStatus),
+		AiStatus: ProcessingStatus(row.AiStatus), SourceCount: row.SourceCount,
+		CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time,
+	}
+	if row.PublishedAt.Valid {
+		publishedAt := row.PublishedAt.Time
+		response.PublishedAt = &publishedAt
+	}
+	return response
+}
+
+func episodeDetail(detail repository.LibraryEpisodeDetail) EpisodeDetail {
+	row := detail.Episode
+	sources := make([]EpisodeSource, len(detail.Sources))
+	for index, source := range detail.Sources {
+		sources[index] = EpisodeSource{
+			Id: formatUUID(source.ID), SourceType: SourceType(source.SourceType), ExternalId: source.ExternalID,
+			SourceUrl: source.SourceUrl, CanonicalUrl: source.CanonicalUrl, RssGuid: source.RssGuid,
+			CreatedAt: source.CreatedAt.Time,
+		}
+	}
+	response := EpisodeDetail{
+		Id: formatUUID(row.ID), Podcast: podcastSummary(
+			row.PodcastID, row.PodcastTitle, row.PodcastAuthor, row.PodcastDescription, row.PodcastCoverUrl, row.PodcastFeedUrl,
+		),
+		Title: row.Title, Description: row.Description, DurationMs: row.DurationMs,
+		CoverUrl: episodeCover(row.CoverUrl, row.PodcastCoverUrl), ResolveStatus: ResolveStatus(row.ResolveStatus),
+		TranscriptionStatus: ProcessingStatus(row.TranscriptionStatus), AiStatus: ProcessingStatus(row.AiStatus),
+		SourceCount: row.SourceCount, Sources: sources, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time,
+	}
+	if row.PublishedAt.Valid {
+		publishedAt := row.PublishedAt.Time
+		response.PublishedAt = &publishedAt
+	}
+	return response
+}
+
+func podcastSummary(
+	id pgtype.UUID,
+	title, author, description, coverURL, feedURL *string,
+) *PodcastSummary {
+	if !id.Valid {
+		return nil
+	}
+	return &PodcastSummary{
+		Id: formatUUID(id), Title: valueOrEmpty(title), Author: valueOrEmpty(author),
+		Description: valueOrEmpty(description), CoverUrl: valueOrEmpty(coverURL), FeedUrl: feedURL,
+	}
+}
+
+func episodeCover(episodeCoverURL string, podcastCoverURL *string) string {
+	if episodeCoverURL != "" || podcastCoverURL == nil {
+		return episodeCoverURL
+	}
+	return *podcastCoverURL
+}
+
+func valueOrEmpty(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
 func writeAPIError(w http.ResponseWriter, status int, code, message string) {
 	writeJSON(w, status, ErrorResponse{Code: code, Message: message})
 }
@@ -175,6 +315,12 @@ func formatUUID(id pgtype.UUID) string {
 	}
 	bytes := id.Bytes
 	return fmt.Sprintf("%x-%x-%x-%x-%x", bytes[0:4], bytes[4:6], bytes[6:8], bytes[8:10], bytes[10:16])
+}
+
+func parseUUID(value string) (pgtype.UUID, error) {
+	var id pgtype.UUID
+	err := id.Scan(value)
+	return id, err
 }
 
 func recoverer(logger *slog.Logger) func(http.Handler) http.Handler {

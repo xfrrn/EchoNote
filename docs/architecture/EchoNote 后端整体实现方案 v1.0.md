@@ -1,6 +1,6 @@
 # EchoNote 后端整体实现方案 v1.0
 
-> 实施记录：当前任务把原推荐“第二阶段”拆成独立的 Import、Library、Notes Phase。Import 的实际边界、数据库并发去重、安全策略和设计调整见 [`phase-2-import.md`](phase-2-import.md)。
+> 实施记录：当前任务把原推荐“第二阶段”拆成独立的 Import、Library、Notes Phase。Import 的实际边界、数据库并发去重与安全策略见 [`phase-2-import.md`](phase-2-import.md)；Library 的查询、状态、删除语义与设计调整见 [`phase-3-library.md`](phase-3-library.md)。
 
 ## 1. 后端定位
 

@@ -1,6 +1,6 @@
 # EchoNote 后端
 
-Go 模块化单体，当前完成 Phase 1 基础设施与 Phase 2 Import：Apple Podcasts、RSS、直接音频解析，异步 Episode 创建和跨来源去重。
+Go 模块化单体，当前完成 Phase 1 基础设施、Phase 2 Import 与 Phase 3 Library：异步 Episode 创建、跨来源去重、资料库查询与删除。
 
 ## 本地启动
 
@@ -51,6 +51,16 @@ GET  /api/v1/imports/{import_id}  查询状态与 episode_id
 
 支持带 `i` 单集参数的 Apple Podcasts 链接、RSS Feed URL 与直接音频 URL。RSS Feed 默认导入其中发布时间最新的音频单集。
 
+## Library API
+
+```text
+GET    /api/v1/episodes?limit=50&offset=0  最近导入列表
+GET    /api/v1/episodes/{episode_id}       Episode、Podcast、Sources 与独立状态
+DELETE /api/v1/episodes/{episode_id}       永久删除 Episode
+```
+
+所有查询和删除都按 `ECHONOTE_USER_ID` 隔离。删除会级联清理 Source 与去重身份键，并在没有其他 Episode 时清理 Podcast；Import 与 Job 历史保留。
+
 ## Migration 与代码生成
 
 ```bash
@@ -69,7 +79,7 @@ go test ./...
 go vet ./...
 ```
 
-PostgreSQL 集成测试默认跳过。显式提供隔离的测试数据库后会执行 Migration，并验证 Job 生命周期以及不同来源导入同一期时的 Episode 去重：
+PostgreSQL 集成测试默认跳过。显式提供隔离的测试数据库后会执行 Migration，并验证 Job 生命周期、跨来源去重、Library 分页、用户隔离与删除级联：
 
 ```text
 ECHONOTE_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/echonote_test?sslmode=disable
@@ -95,4 +105,4 @@ migrations/              版本化 SQL
 openapi/                 HTTP 契约
 ```
 
-实施记录见 `docs/architecture/phase-1-foundation.md` 与 `docs/architecture/phase-2-import.md`。
+实施记录见 `docs/architecture/phase-1-foundation.md`、`docs/architecture/phase-2-import.md` 与 `docs/architecture/phase-3-library.md`。
