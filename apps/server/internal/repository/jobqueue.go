@@ -170,6 +170,28 @@ func (q *JobQueue) RetryOrFail(
 	return job.Status, nil
 }
 
+func (q *JobQueue) Reschedule(ctx context.Context, jobID pgtype.UUID, workerID string, delay time.Duration) error {
+	_, err := withTx(ctx, q.pool, func(queries *db.Queries) (db.Job, error) {
+		job, err := queries.RescheduleJob(ctx, db.RescheduleJobParams{
+			DelayMilliseconds: durationMilliseconds(delay), JobID: jobID, WorkerID: &workerID,
+		})
+		if err != nil {
+			return db.Job{}, err
+		}
+		if err := createEvent(ctx, queries, job, "rescheduled"); err != nil {
+			return db.Job{}, err
+		}
+		return job, nil
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrJobLeaseLost
+	}
+	if err != nil {
+		return fmt.Errorf("reschedule job: %w", err)
+	}
+	return nil
+}
+
 func (q *JobQueue) RequeueStale(ctx context.Context, leaseTimeout time.Duration) (int, error) {
 	jobs, err := withTx(ctx, q.pool, func(queries *db.Queries) ([]db.Job, error) {
 		jobs, err := queries.RequeueStaleJobs(ctx, durationMilliseconds(leaseTimeout))

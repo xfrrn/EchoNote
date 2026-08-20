@@ -160,6 +160,63 @@ func (e StatusResponseStatus) Valid() bool {
 	}
 }
 
+// Defines values for TranscriptionProfile.
+const (
+	Economy TranscriptionProfile = "economy"
+	Quality TranscriptionProfile = "quality"
+)
+
+// Valid indicates whether the value is a known member of the TranscriptionProfile enum.
+func (e TranscriptionProfile) Valid() bool {
+	switch e {
+	case Economy:
+		return true
+	case Quality:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TranscriptionRunStatus.
+const (
+	TranscriptionRunStatusAligning     TranscriptionRunStatus = "aligning"
+	TranscriptionRunStatusCanceled     TranscriptionRunStatus = "canceled"
+	TranscriptionRunStatusCompleted    TranscriptionRunStatus = "completed"
+	TranscriptionRunStatusDownloading  TranscriptionRunStatus = "downloading"
+	TranscriptionRunStatusFailed       TranscriptionRunStatus = "failed"
+	TranscriptionRunStatusMerging      TranscriptionRunStatus = "merging"
+	TranscriptionRunStatusPreparing    TranscriptionRunStatus = "preparing"
+	TranscriptionRunStatusQueued       TranscriptionRunStatus = "queued"
+	TranscriptionRunStatusTranscribing TranscriptionRunStatus = "transcribing"
+)
+
+// Valid indicates whether the value is a known member of the TranscriptionRunStatus enum.
+func (e TranscriptionRunStatus) Valid() bool {
+	switch e {
+	case TranscriptionRunStatusAligning:
+		return true
+	case TranscriptionRunStatusCanceled:
+		return true
+	case TranscriptionRunStatusCompleted:
+		return true
+	case TranscriptionRunStatusDownloading:
+		return true
+	case TranscriptionRunStatusFailed:
+		return true
+	case TranscriptionRunStatusMerging:
+		return true
+	case TranscriptionRunStatusPreparing:
+		return true
+	case TranscriptionRunStatusQueued:
+		return true
+	case TranscriptionRunStatusTranscribing:
+		return true
+	default:
+		return false
+	}
+}
+
 // CaptureResponse defines model for CaptureResponse.
 type CaptureResponse struct {
 	ImportId *string `json:"import_id,omitempty"`
@@ -185,6 +242,13 @@ type CreateNoteRequest struct {
 	ClientNoteId string    `json:"client_note_id"`
 	Content      string    `json:"content"`
 	CreatedAt    time.Time `json:"created_at"`
+}
+
+// CreateTranscriptionRequest defines model for CreateTranscriptionRequest.
+type CreateTranscriptionRequest struct {
+	LanguageHint *string              `json:"language_hint,omitempty"`
+	Profile      TranscriptionProfile `json:"profile"`
+	SpeakerCount *int                 `json:"speaker_count,omitempty"`
 }
 
 // EpisodeDetail defines model for EpisodeDetail.
@@ -268,6 +332,12 @@ type ImportResponse struct {
 // ImportResponseStatus defines model for ImportResponse.Status.
 type ImportResponseStatus string
 
+// MergeTranscriptSpeakersRequest defines model for MergeTranscriptSpeakersRequest.
+type MergeTranscriptSpeakersRequest struct {
+	SourceSpeakerId string `json:"source_speaker_id"`
+	TargetSpeakerId string `json:"target_speaker_id"`
+}
+
 // Note defines model for Note.
 type Note struct {
 	ClientNoteId string     `json:"client_note_id"`
@@ -323,13 +393,112 @@ type StatusResponse struct {
 // StatusResponseStatus defines model for StatusResponse.Status.
 type StatusResponseStatus string
 
+// Transcript defines model for Transcript.
+type Transcript struct {
+	CreatedAt          time.Time           `json:"created_at"`
+	EpisodeId          string              `json:"episode_id"`
+	Id                 string              `json:"id"`
+	IsActive           bool                `json:"is_active"`
+	Speakers           []TranscriptSpeaker `json:"speakers"`
+	Status             string              `json:"status"`
+	TranscriptionRunId string              `json:"transcription_run_id"`
+	Version            int                 `json:"version"`
+}
+
+// TranscriptSegment defines model for TranscriptSegment.
+type TranscriptSegment struct {
+	EndMs         int64            `json:"end_ms"`
+	Id            string           `json:"id"`
+	Sequence      int              `json:"sequence"`
+	SourceChunkId string           `json:"source_chunk_id"`
+	SpeakerId     string           `json:"speaker_id"`
+	StartMs       int64            `json:"start_ms"`
+	Text          string           `json:"text"`
+	Words         []TranscriptWord `json:"words"`
+}
+
+// TranscriptSegmentList defines model for TranscriptSegmentList.
+type TranscriptSegmentList struct {
+	Items  []TranscriptSegment `json:"items"`
+	Limit  int                 `json:"limit"`
+	Offset int                 `json:"offset"`
+	Total  int64               `json:"total"`
+}
+
+// TranscriptSpeaker defines model for TranscriptSpeaker.
+type TranscriptSpeaker struct {
+	CreatedAt        time.Time `json:"created_at"`
+	DisplayName      string    `json:"display_name"`
+	Id               string    `json:"id"`
+	Role             string    `json:"role"`
+	SpeakerProfileId *string   `json:"speaker_profile_id,omitempty"`
+	StableKey        string    `json:"stable_key"`
+	UpdatedAt        time.Time `json:"updated_at"`
+}
+
+// TranscriptWord defines model for TranscriptWord.
+type TranscriptWord struct {
+	EndMs       int64   `json:"end_ms"`
+	Punctuation *string `json:"punctuation,omitempty"`
+	StartMs     int64   `json:"start_ms"`
+	Text        string  `json:"text"`
+}
+
+// TranscriptionConfig defines model for TranscriptionConfig.
+type TranscriptionConfig struct {
+	LanguageHint *string `json:"language_hint,omitempty"`
+	SpeakerCount *int    `json:"speaker_count,omitempty"`
+}
+
+// TranscriptionError defines model for TranscriptionError.
+type TranscriptionError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// TranscriptionProfile defines model for TranscriptionProfile.
+type TranscriptionProfile string
+
+// TranscriptionRun defines model for TranscriptionRun.
+type TranscriptionRun struct {
+	CompletedAt     *time.Time             `json:"completed_at,omitempty"`
+	CompletedChunks int                    `json:"completed_chunks"`
+	Config          TranscriptionConfig    `json:"config"`
+	CreatedAt       time.Time              `json:"created_at"`
+	DurationMs      *int64                 `json:"duration_ms,omitempty"`
+	EpisodeId       string                 `json:"episode_id"`
+	Error           *TranscriptionError    `json:"error,omitempty"`
+	Id              string                 `json:"id"`
+	Model           string                 `json:"model"`
+	Profile         TranscriptionProfile   `json:"profile"`
+	Provider        string                 `json:"provider"`
+	Stage           string                 `json:"stage"`
+	StartedAt       *time.Time             `json:"started_at,omitempty"`
+	Status          TranscriptionRunStatus `json:"status"`
+	TotalChunks     int                    `json:"total_chunks"`
+	UpdatedAt       time.Time              `json:"updated_at"`
+	WorkflowVersion int                    `json:"workflow_version"`
+}
+
+// TranscriptionRunStatus defines model for TranscriptionRunStatus.
+type TranscriptionRunStatus string
+
 // UpdateNoteRequest defines model for UpdateNoteRequest.
 type UpdateNoteRequest struct {
 	Content string `json:"content"`
 }
 
+// UpdateTranscriptSpeakerRequest defines model for UpdateTranscriptSpeakerRequest.
+type UpdateTranscriptSpeakerRequest struct {
+	DisplayName string  `json:"display_name"`
+	Role        *string `json:"role,omitempty"`
+}
+
 // BadRequest defines model for BadRequest.
 type BadRequest = ErrorResponse
+
+// Conflict defines model for Conflict.
+type Conflict = ErrorResponse
 
 // InternalError defines model for InternalError.
 type InternalError = ErrorResponse
@@ -337,8 +506,23 @@ type InternalError = ErrorResponse
 // NotFound defines model for NotFound.
 type NotFound = ErrorResponse
 
+// ServiceUnavailable defines model for ServiceUnavailable.
+type ServiceUnavailable = ErrorResponse
+
 // ListEpisodesParams defines parameters for ListEpisodes.
 type ListEpisodesParams struct {
+	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// GetTranscriptionEventsParams defines parameters for GetTranscriptionEvents.
+type GetTranscriptionEventsParams struct {
+	// LastEventID Return durable events after this event ID.
+	LastEventID *int64 `json:"Last-Event-ID,omitempty"`
+}
+
+// ListTranscriptSegmentsParams defines parameters for ListTranscriptSegments.
+type ListTranscriptSegmentsParams struct {
 	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
 	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
 }
@@ -349,11 +533,20 @@ type CreateCaptureJSONRequestBody = CreateCaptureRequest
 // CreateEpisodeNoteJSONRequestBody defines body for CreateEpisodeNote for application/json ContentType.
 type CreateEpisodeNoteJSONRequestBody = CreateNoteRequest
 
+// CreateTranscriptionJSONRequestBody defines body for CreateTranscription for application/json ContentType.
+type CreateTranscriptionJSONRequestBody = CreateTranscriptionRequest
+
 // CreateImportJSONRequestBody defines body for CreateImport for application/json ContentType.
 type CreateImportJSONRequestBody = CreateImportRequest
 
 // UpdateNoteJSONRequestBody defines body for UpdateNote for application/json ContentType.
 type UpdateNoteJSONRequestBody = UpdateNoteRequest
+
+// MergeTranscriptSpeakersJSONRequestBody defines body for MergeTranscriptSpeakers for application/json ContentType.
+type MergeTranscriptSpeakersJSONRequestBody = MergeTranscriptSpeakersRequest
+
+// UpdateTranscriptSpeakerJSONRequestBody defines body for UpdateTranscriptSpeaker for application/json ContentType.
+type UpdateTranscriptSpeakerJSONRequestBody = UpdateTranscriptSpeakerRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -375,6 +568,12 @@ type ServerInterface interface {
 	// CreateEpisodeNote Create an idempotent Note for an Episode
 	// (POST /api/v1/episodes/{episodeId}/notes)
 	CreateEpisodeNote(w http.ResponseWriter, r *http.Request, episodeId string)
+	// GetEpisodeTranscript Get the active Transcript Version and Speakers
+	// (GET /api/v1/episodes/{episodeId}/transcript)
+	GetEpisodeTranscript(w http.ResponseWriter, r *http.Request, episodeId string)
+	// CreateTranscription Start a versioned Episode transcription
+	// (POST /api/v1/episodes/{episodeId}/transcriptions)
+	CreateTranscription(w http.ResponseWriter, r *http.Request, episodeId string)
 	// CreateImport Queue an episode import
 	// (POST /api/v1/imports)
 	CreateImport(w http.ResponseWriter, r *http.Request)
@@ -387,6 +586,27 @@ type ServerInterface interface {
 	// UpdateNote Update a Note
 	// (PATCH /api/v1/notes/{noteId})
 	UpdateNote(w http.ResponseWriter, r *http.Request, noteId string)
+	// GetTranscription Get transcription workflow state
+	// (GET /api/v1/transcriptions/{runId})
+	GetTranscription(w http.ResponseWriter, r *http.Request, runId string)
+	// CancelTranscription Cancel local work and request cancellation of queued ASR tasks
+	// (POST /api/v1/transcriptions/{runId}/cancel)
+	CancelTranscription(w http.ResponseWriter, r *http.Request, runId string)
+	// GetTranscriptionEvents Stream durable transcription events
+	// (GET /api/v1/transcriptions/{runId}/events)
+	GetTranscriptionEvents(w http.ResponseWriter, r *http.Request, runId string, params GetTranscriptionEventsParams)
+	// RetryTranscription Retry only the failed transcription stage or chunks
+	// (POST /api/v1/transcriptions/{runId}/retry)
+	RetryTranscription(w http.ResponseWriter, r *http.Request, runId string)
+	// ListTranscriptSegments List ordered Transcript Segments
+	// (GET /api/v1/transcripts/{transcriptId}/segments)
+	ListTranscriptSegments(w http.ResponseWriter, r *http.Request, transcriptId string, params ListTranscriptSegmentsParams)
+	// MergeTranscriptSpeakers Merge one Global Speaker into another
+	// (POST /api/v1/transcripts/{transcriptId}/speakers/merge)
+	MergeTranscriptSpeakers(w http.ResponseWriter, r *http.Request, transcriptId string)
+	// UpdateTranscriptSpeaker Rename a Global Speaker or update its role
+	// (PATCH /api/v1/transcripts/{transcriptId}/speakers/{speakerId})
+	UpdateTranscriptSpeaker(w http.ResponseWriter, r *http.Request, transcriptId string, speakerId string)
 	// GetLiveness Process liveness
 	// (GET /healthz)
 	GetLiveness(w http.ResponseWriter, r *http.Request)
@@ -435,6 +655,18 @@ func (_ Unimplemented) CreateEpisodeNote(w http.ResponseWriter, r *http.Request,
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// GetEpisodeTranscript Get the active Transcript Version and Speakers
+// (GET /api/v1/episodes/{episodeId}/transcript)
+func (_ Unimplemented) GetEpisodeTranscript(w http.ResponseWriter, r *http.Request, episodeId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CreateTranscription Start a versioned Episode transcription
+// (POST /api/v1/episodes/{episodeId}/transcriptions)
+func (_ Unimplemented) CreateTranscription(w http.ResponseWriter, r *http.Request, episodeId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // CreateImport Queue an episode import
 // (POST /api/v1/imports)
 func (_ Unimplemented) CreateImport(w http.ResponseWriter, r *http.Request) {
@@ -456,6 +688,48 @@ func (_ Unimplemented) DeleteNote(w http.ResponseWriter, r *http.Request, noteId
 // UpdateNote Update a Note
 // (PATCH /api/v1/notes/{noteId})
 func (_ Unimplemented) UpdateNote(w http.ResponseWriter, r *http.Request, noteId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetTranscription Get transcription workflow state
+// (GET /api/v1/transcriptions/{runId})
+func (_ Unimplemented) GetTranscription(w http.ResponseWriter, r *http.Request, runId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CancelTranscription Cancel local work and request cancellation of queued ASR tasks
+// (POST /api/v1/transcriptions/{runId}/cancel)
+func (_ Unimplemented) CancelTranscription(w http.ResponseWriter, r *http.Request, runId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetTranscriptionEvents Stream durable transcription events
+// (GET /api/v1/transcriptions/{runId}/events)
+func (_ Unimplemented) GetTranscriptionEvents(w http.ResponseWriter, r *http.Request, runId string, params GetTranscriptionEventsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// RetryTranscription Retry only the failed transcription stage or chunks
+// (POST /api/v1/transcriptions/{runId}/retry)
+func (_ Unimplemented) RetryTranscription(w http.ResponseWriter, r *http.Request, runId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListTranscriptSegments List ordered Transcript Segments
+// (GET /api/v1/transcripts/{transcriptId}/segments)
+func (_ Unimplemented) ListTranscriptSegments(w http.ResponseWriter, r *http.Request, transcriptId string, params ListTranscriptSegmentsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// MergeTranscriptSpeakers Merge one Global Speaker into another
+// (POST /api/v1/transcripts/{transcriptId}/speakers/merge)
+func (_ Unimplemented) MergeTranscriptSpeakers(w http.ResponseWriter, r *http.Request, transcriptId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// UpdateTranscriptSpeaker Rename a Global Speaker or update its role
+// (PATCH /api/v1/transcripts/{transcriptId}/speakers/{speakerId})
+func (_ Unimplemented) UpdateTranscriptSpeaker(w http.ResponseWriter, r *http.Request, transcriptId string, speakerId string) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -644,6 +918,58 @@ func (siw *ServerInterfaceWrapper) CreateEpisodeNote(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// GetEpisodeTranscript operation middleware
+func (siw *ServerInterfaceWrapper) GetEpisodeTranscript(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "episodeId" -------------
+	var episodeId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "episodeId", chi.URLParam(r, "episodeId"), &episodeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "episodeId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetEpisodeTranscript(w, r, episodeId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateTranscription operation middleware
+func (siw *ServerInterfaceWrapper) CreateTranscription(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "episodeId" -------------
+	var episodeId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "episodeId", chi.URLParam(r, "episodeId"), &episodeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "episodeId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateTranscription(w, r, episodeId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // CreateImport operation middleware
 func (siw *ServerInterfaceWrapper) CreateImport(w http.ResponseWriter, r *http.Request) {
 
@@ -727,6 +1053,250 @@ func (siw *ServerInterfaceWrapper) UpdateNote(w http.ResponseWriter, r *http.Req
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateNote(w, r, noteId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetTranscription operation middleware
+func (siw *ServerInterfaceWrapper) GetTranscription(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "runId" -------------
+	var runId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "runId", chi.URLParam(r, "runId"), &runId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "runId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTranscription(w, r, runId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CancelTranscription operation middleware
+func (siw *ServerInterfaceWrapper) CancelTranscription(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "runId" -------------
+	var runId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "runId", chi.URLParam(r, "runId"), &runId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "runId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CancelTranscription(w, r, runId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetTranscriptionEvents operation middleware
+func (siw *ServerInterfaceWrapper) GetTranscriptionEvents(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "runId" -------------
+	var runId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "runId", chi.URLParam(r, "runId"), &runId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "runId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetTranscriptionEventsParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Last-Event-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Last-Event-ID")]; found {
+		var LastEventID int64
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Last-Event-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Last-Event-ID", valueList[0], &LastEventID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "integer", Format: "int64"})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Last-Event-ID", Err: err})
+			return
+		}
+
+		params.LastEventID = &LastEventID
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTranscriptionEvents(w, r, runId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RetryTranscription operation middleware
+func (siw *ServerInterfaceWrapper) RetryTranscription(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "runId" -------------
+	var runId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "runId", chi.URLParam(r, "runId"), &runId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "runId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RetryTranscription(w, r, runId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListTranscriptSegments operation middleware
+func (siw *ServerInterfaceWrapper) ListTranscriptSegments(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "transcriptId" -------------
+	var transcriptId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "transcriptId", chi.URLParam(r, "transcriptId"), &transcriptId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "transcriptId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListTranscriptSegmentsParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "offset"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListTranscriptSegments(w, r, transcriptId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// MergeTranscriptSpeakers operation middleware
+func (siw *ServerInterfaceWrapper) MergeTranscriptSpeakers(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "transcriptId" -------------
+	var transcriptId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "transcriptId", chi.URLParam(r, "transcriptId"), &transcriptId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "transcriptId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.MergeTranscriptSpeakers(w, r, transcriptId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateTranscriptSpeaker operation middleware
+func (siw *ServerInterfaceWrapper) UpdateTranscriptSpeaker(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "transcriptId" -------------
+	var transcriptId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "transcriptId", chi.URLParam(r, "transcriptId"), &transcriptId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "transcriptId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "speakerId" -------------
+	var speakerId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "speakerId", chi.URLParam(r, "speakerId"), &speakerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "speakerId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateTranscriptSpeaker(w, r, transcriptId, speakerId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -912,6 +1482,33 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Patch(options.BaseURL+"/api/v1/notes/{noteId}", wrapper.UpdateNote)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/episodes/{episodeId}/transcriptions", wrapper.CreateTranscription)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/transcriptions/{runId}", wrapper.GetTranscription)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/transcriptions/{runId}/events", wrapper.GetTranscriptionEvents)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/transcriptions/{runId}/retry", wrapper.RetryTranscription)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/transcriptions/{runId}/cancel", wrapper.CancelTranscription)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/episodes/{episodeId}/transcript", wrapper.GetEpisodeTranscript)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/transcripts/{transcriptId}/segments", wrapper.ListTranscriptSegments)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/api/v1/transcripts/{transcriptId}/speakers/{speakerId}", wrapper.UpdateTranscriptSpeaker)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/transcripts/{transcriptId}/speakers/merge", wrapper.MergeTranscriptSpeakers)
 	})
 
 	return r

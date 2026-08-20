@@ -124,6 +124,30 @@ func TestJobQueueLifecycle(t *testing.T) {
 	if err != nil || status != "failed" {
 		t.Fatalf("permanent failure status=%q err=%v", status, err)
 	}
+
+	pollJob, err := queue.Enqueue(ctx, NewJob{
+		Type: jobType + "_poll", EntityType: "phase1_test", EntityID: randomUUID(t), MaxAttempts: 1,
+		RunAfter: time.Now().Add(-time.Second),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _, _ = pool.Exec(context.Background(), "DELETE FROM jobs WHERE id = $1", pollJob.ID) }()
+	pollAttempt, found, err := queue.Claim(ctx, "worker-test", []string{jobType + "_poll"})
+	if err != nil || !found || pollAttempt.Attempt != 1 {
+		t.Fatalf("poll claim=%+v found=%v err=%v", pollAttempt, found, err)
+	}
+	if err := queue.Reschedule(ctx, pollAttempt.ID, "worker-test", time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(5 * time.Millisecond)
+	pollAttempt, found, err = queue.Claim(ctx, "worker-test", []string{jobType + "_poll"})
+	if err != nil || !found || pollAttempt.Attempt != 1 {
+		t.Fatalf("rescheduled poll claim=%+v found=%v err=%v", pollAttempt, found, err)
+	}
+	if err := queue.Complete(ctx, pollAttempt.ID, "worker-test"); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func randomUUID(t *testing.T) pgtype.UUID {

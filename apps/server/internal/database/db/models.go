@@ -107,3 +107,99 @@ type Podcast struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
+
+type TranscriptSegment struct {
+	ID                  pgtype.UUID        `json:"id"`
+	TranscriptVersionID pgtype.UUID        `json:"transcript_version_id"`
+	SpeakerID           pgtype.UUID        `json:"speaker_id"`
+	Sequence            int32              `json:"sequence"`
+	StartMs             int64              `json:"start_ms"`
+	EndMs               int64              `json:"end_ms"`
+	Text                string             `json:"text"`
+	Words               []byte             `json:"words"`
+	SourceChunkID       pgtype.UUID        `json:"source_chunk_id"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
+type TranscriptSpeaker struct {
+	ID                  pgtype.UUID        `json:"id"`
+	TranscriptVersionID pgtype.UUID        `json:"transcript_version_id"`
+	StableKey           string             `json:"stable_key"`
+	DisplayName         string             `json:"display_name"`
+	Role                string             `json:"role"`
+	SpeakerProfileID    pgtype.UUID        `json:"speaker_profile_id"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}
+
+type TranscriptVersion struct {
+	ID                 pgtype.UUID        `json:"id"`
+	UserID             pgtype.UUID        `json:"user_id"`
+	EpisodeID          pgtype.UUID        `json:"episode_id"`
+	TranscriptionRunID pgtype.UUID        `json:"transcription_run_id"`
+	Version            int32              `json:"version"`
+	IsActive           bool               `json:"is_active"`
+	Status             string             `json:"status"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type TranscriptionChunk struct {
+	ID                     pgtype.UUID        `json:"id"`
+	TranscriptionRunID     pgtype.UUID        `json:"transcription_run_id"`
+	Sequence               int32              `json:"sequence"`
+	CoreStartMs            int64              `json:"core_start_ms"`
+	CoreEndMs              int64              `json:"core_end_ms"`
+	RenderStartMs          int64              `json:"render_start_ms"`
+	RenderEndMs            int64              `json:"render_end_ms"`
+	Status                 string             `json:"status"`
+	ObjectKey              *string            `json:"object_key"`
+	AudioHash              *string            `json:"audio_hash"`
+	Fingerprint            *string            `json:"fingerprint"`
+	ExternalTaskID         *string            `json:"external_task_id"`
+	ResultUrl              *string            `json:"result_url"`
+	RawResultObjectKey     *string            `json:"raw_result_object_key"`
+	NormalizedResult       []byte             `json:"normalized_result"`
+	SpeakerMap             []byte             `json:"speaker_map"`
+	AlignmentLowConfidence bool               `json:"alignment_low_confidence"`
+	ErrorCode              *string            `json:"error_code"`
+	ErrorMessage           *string            `json:"error_message"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	CompletedAt            pgtype.Timestamptz `json:"completed_at"`
+}
+
+type TranscriptionEvent struct {
+	ID                 int64              `json:"id"`
+	TranscriptionRunID pgtype.UUID        `json:"transcription_run_id"`
+	EventType          string             `json:"event_type"`
+	Data               []byte             `json:"data"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type TranscriptionRun struct {
+	ID                pgtype.UUID        `json:"id"`
+	UserID            pgtype.UUID        `json:"user_id"`
+	EpisodeID         pgtype.UUID        `json:"episode_id"`
+	Profile           string             `json:"profile"`
+	Provider          string             `json:"provider"`
+	Model             string             `json:"model"`
+	Status            string             `json:"status"`
+	Stage             string             `json:"stage"`
+	Version           int32              `json:"version"`
+	Config            []byte             `json:"config"`
+	SourceObjectKey   *string            `json:"source_object_key"`
+	SourceAudioHash   *string            `json:"source_audio_hash"`
+	PreparedObjectKey *string            `json:"prepared_object_key"`
+	PreparedAudioHash *string            `json:"prepared_audio_hash"`
+	DurationMs        *int64             `json:"duration_ms"`
+	TotalChunks       int32              `json:"total_chunks"`
+	CompletedChunks   int32              `json:"completed_chunks"`
+	StartedAt         pgtype.Timestamptz `json:"started_at"`
+	CompletedAt       pgtype.Timestamptz `json:"completed_at"`
+	ErrorCode         *string            `json:"error_code"`
+	ErrorMessage      *string            `json:"error_message"`
+	AudioCleanedAt    pgtype.Timestamptz `json:"audio_cleaned_at"`
+	ChunksCleanedAt   pgtype.Timestamptz `json:"chunks_cleaned_at"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}

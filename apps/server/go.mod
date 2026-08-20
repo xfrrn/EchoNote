@@ -3,6 +3,7 @@ module github.com/Actify/echonote/apps/server
 go 1.25.0
 
 require (
+	github.com/aliyun/alibabacloud-oss-go-sdk-v2 v1.5.3
 	github.com/go-chi/chi/v5 v5.3.2
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/jackc/pgx/v5 v5.10.0
@@ -18,4 +19,5 @@ require (
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/text v0.32.0 // indirect
+	golang.org/x/time v0.14.0 // indirect
 )

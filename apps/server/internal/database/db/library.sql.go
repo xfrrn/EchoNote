@@ -12,7 +12,7 @@ import (
 )
 
 const cancelEpisodeImportJobs = `-- name: CancelEpisodeImportJobs :many
-UPDATE jobs
+UPDATE jobs AS job
 SET status = 'canceled',
     stage = 'canceled',
     locked_by = NULL,
@@ -21,14 +21,14 @@ SET status = 'canceled',
     error_message = NULL,
     updated_at = now(),
     completed_at = now()
-WHERE id IN (
+WHERE job.id IN (
     SELECT import_record.job_id
     FROM imports AS import_record
     WHERE import_record.episode_id = $1
       AND import_record.user_id = $2
 )
-  AND status IN ('queued', 'running')
-RETURNING id, user_id, type, entity_type, entity_id, payload, status, stage, priority, attempt, max_attempts, run_after, locked_by, locked_at, error_code, error_message, created_at, updated_at, completed_at
+  AND job.status IN ('queued', 'running')
+RETURNING job.id, job.user_id, job.type, job.entity_type, job.entity_id, job.payload, job.status, job.stage, job.priority, job.attempt, job.max_attempts, job.run_after, job.locked_by, job.locked_at, job.error_code, job.error_message, job.created_at, job.updated_at, job.completed_at
 `
 
 type CancelEpisodeImportJobsParams struct {
@@ -38,6 +38,78 @@ type CancelEpisodeImportJobsParams struct {
 
 func (q *Queries) CancelEpisodeImportJobs(ctx context.Context, arg CancelEpisodeImportJobsParams) ([]Job, error) {
 	rows, err := q.db.Query(ctx, cancelEpisodeImportJobs, arg.EpisodeID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Job{}
+	for rows.Next() {
+		var i Job
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Type,
+			&i.EntityType,
+			&i.EntityID,
+			&i.Payload,
+			&i.Status,
+			&i.Stage,
+			&i.Priority,
+			&i.Attempt,
+			&i.MaxAttempts,
+			&i.RunAfter,
+			&i.LockedBy,
+			&i.LockedAt,
+			&i.ErrorCode,
+			&i.ErrorMessage,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.CompletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const cancelEpisodeTranscriptionJobs = `-- name: CancelEpisodeTranscriptionJobs :many
+UPDATE jobs AS job
+SET status = 'canceled',
+    stage = 'canceled',
+    locked_by = NULL,
+    locked_at = NULL,
+    error_code = NULL,
+    error_message = NULL,
+    updated_at = now(),
+    completed_at = now()
+WHERE job.user_id = $1
+  AND job.status IN ('queued', 'running')
+  AND (
+      (job.entity_type = 'transcription_run' AND job.entity_id IN (
+          SELECT run.id FROM transcription_runs AS run WHERE run.episode_id = $2
+      ))
+      OR
+      (job.entity_type = 'transcription_chunk' AND job.entity_id IN (
+          SELECT chunk.id
+          FROM transcription_chunks AS chunk
+          JOIN transcription_runs AS run ON run.id = chunk.transcription_run_id
+          WHERE run.episode_id = $2
+      ))
+  )
+RETURNING job.id, job.user_id, job.type, job.entity_type, job.entity_id, job.payload, job.status, job.stage, job.priority, job.attempt, job.max_attempts, job.run_after, job.locked_by, job.locked_at, job.error_code, job.error_message, job.created_at, job.updated_at, job.completed_at
+`
+
+type CancelEpisodeTranscriptionJobsParams struct {
+	UserID    pgtype.UUID `json:"user_id"`
+	EpisodeID pgtype.UUID `json:"episode_id"`
+}
+
+func (q *Queries) CancelEpisodeTranscriptionJobs(ctx context.Context, arg CancelEpisodeTranscriptionJobsParams) ([]Job, error) {
+	rows, err := q.db.Query(ctx, cancelEpisodeTranscriptionJobs, arg.UserID, arg.EpisodeID)
 	if err != nil {
 		return nil, err
 	}
@@ -213,6 +285,59 @@ func (q *Queries) GetLibraryEpisode(ctx context.Context, arg GetLibraryEpisodePa
 		&i.SourceCount,
 	)
 	return i, err
+}
+
+const listEpisodeTranscriptionObjectKeys = `-- name: ListEpisodeTranscriptionObjectKeys :many
+SELECT object_key::text
+FROM (
+    SELECT source_object_key AS object_key
+    FROM transcription_runs AS run
+    WHERE run.episode_id = $1
+      AND run.user_id = $2
+    UNION ALL
+    SELECT prepared_object_key AS object_key
+    FROM transcription_runs AS run
+    WHERE run.episode_id = $1
+      AND run.user_id = $2
+    UNION ALL
+    SELECT chunk.object_key
+    FROM transcription_chunks AS chunk
+    JOIN transcription_runs AS run ON run.id = chunk.transcription_run_id
+    WHERE run.episode_id = $1
+      AND run.user_id = $2
+    UNION ALL
+    SELECT chunk.raw_result_object_key
+    FROM transcription_chunks AS chunk
+    JOIN transcription_runs AS run ON run.id = chunk.transcription_run_id
+    WHERE run.episode_id = $1
+      AND run.user_id = $2
+) AS objects
+WHERE object_key IS NOT NULL
+`
+
+type ListEpisodeTranscriptionObjectKeysParams struct {
+	EpisodeID pgtype.UUID `json:"episode_id"`
+	UserID    pgtype.UUID `json:"user_id"`
+}
+
+func (q *Queries) ListEpisodeTranscriptionObjectKeys(ctx context.Context, arg ListEpisodeTranscriptionObjectKeysParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listEpisodeTranscriptionObjectKeys, arg.EpisodeID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var object_key string
+		if err := rows.Scan(&object_key); err != nil {
+			return nil, err
+		}
+		items = append(items, object_key)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listLibraryEpisodeSources = `-- name: ListLibraryEpisodeSources :many

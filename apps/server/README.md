@@ -1,10 +1,10 @@
 # EchoNote 后端
 
-Go 模块化单体，当前完成 Phase 1 基础设施、Phase 2 Import、Phase 3 Library 与 Phase 4 Notes：异步 Episode 创建、跨来源去重、资料库查询、Capture 和离线幂等笔记。
+Go 模块化单体，当前完成 Phase 1–5：基础设施、Import、Library、Notes，以及完整的异步 Transcription / Transcript / Speaker 垂直切片。
 
 ## 本地启动
 
-要求 Go 1.25+ 与 PostgreSQL（最低支持 PostgreSQL 13，需提供 `gen_random_uuid()`）。优先使用已有 PostgreSQL，并为 EchoNote 创建独立数据库。没有本地数据库时，仓库根目录提供可选 Compose：
+要求 Go 1.25+、PostgreSQL（最低支持 PostgreSQL 13，需提供 `gen_random_uuid()`）、FFmpeg 与 FFprobe。优先使用已有 PostgreSQL，并为 EchoNote 创建独立数据库。没有本地数据库时，仓库根目录提供可选 Compose：
 
 ```bash
 docker compose up -d postgres
@@ -25,7 +25,21 @@ go run ./cmd/api
 go run ./cmd/worker
 ```
 
-API 和 Worker 是独立进程。Worker 当前处理 `resolve_episode`，同时续租并回收超时任务。Auth 尚未进入当前 Phase，`ECHONOTE_USER_ID` 暂时提供单用户数据边界。
+API 和 Worker 是独立进程。Worker 处理 `resolve_episode` 及 Phase 5 转录状态机，同时续租并回收超时任务。Auth 尚未进入当前 Phase，`ECHONOTE_USER_ID` 暂时提供单用户数据边界。
+
+未配置 ASR / Object Storage 时，已有 Import、Library、Notes 与 Transcript 读取仍可运行；新建和重试转录返回 503，Worker 只注册已有业务 Job。启用转录至少需要：
+
+```text
+ASR_PROVIDER=aliyun
+ASR_API_KEY=...
+STORAGE_PROVIDER=aliyun_oss
+STORAGE_REGION=cn-beijing
+STORAGE_BUCKET=...
+STORAGE_ACCESS_KEY=...
+STORAGE_SECRET_KEY=...
+```
+
+完整配置和可选的 HTTPS Endpoint 见仓库根目录 `.env.example`。真实密钥不得提交。
 
 ## 健康检查
 
@@ -75,6 +89,22 @@ DELETE /api/v1/notes/{note_id}             幂等软删除 Note
 
 PWA 必须为每条离线 Note 生成稳定 UUID `client_note_id`。首次创建返回 201；相同用户重复提交同一 ID 返回已保存 Note 和 200，不会重复写入。URL Capture 会原子创建 Pending Episode、Note 与 Import Job，并返回 `import_id` 供轮询。
 
+## Transcription、Transcript 与 Speaker API
+
+```text
+POST /api/v1/episodes/{episode_id}/transcriptions       新建版本化转录
+GET  /api/v1/transcriptions/{run_id}                    查询状态
+GET  /api/v1/transcriptions/{run_id}/events             可恢复 SSE 事件
+POST /api/v1/transcriptions/{run_id}/retry              从失败位置重试
+POST /api/v1/transcriptions/{run_id}/cancel             取消
+GET  /api/v1/episodes/{episode_id}/transcript           当前 Transcript Version
+GET  /api/v1/transcripts/{transcript_id}/segments       分页读取 Segment
+PATCH /api/v1/transcripts/{transcript_id}/speakers/{id} 重命名 / 更新角色
+POST /api/v1/transcripts/{transcript_id}/speakers/merge 合并 Speaker
+```
+
+`economy` 使用 Paraformer-v2，`quality` 使用 Fun-ASR。音频统一转换为 16 kHz 单声道 FLAC，长音频按 90 分钟 Core Window 与 5 分钟左右重叠切片；算法和恢复语义见 `docs/architecture/transcription.md`。
+
 ## Migration 与代码生成
 
 ```bash
@@ -93,7 +123,7 @@ go test ./...
 go vet ./...
 ```
 
-PostgreSQL 集成测试默认跳过。显式提供隔离的测试数据库后会执行 Migration，并验证 Job 生命周期、跨来源去重、Library 分页、Notes HTTP 生命周期、并发离线幂等、用户隔离与删除级联：
+PostgreSQL 集成测试默认跳过。显式提供隔离的测试数据库后会执行 Migration，并验证 Job 生命周期、跨来源去重、Library 分页、Notes HTTP 生命周期、并发离线幂等、3 小时转录、Speaker ID 对调、单 Chunk 恢复、Transcript Version、用户隔离与删除级联：
 
 ```text
 ECHONOTE_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/echonote_test?sslmode=disable
@@ -110,13 +140,13 @@ cmd/migrate/             Migration CLI
 internal/config/         环境配置
 internal/database/       pgx 连接、migration 与 sqlc 生成代码
 internal/http/           Chi 路由、OpenAPI handler、中间件
-internal/domain/         Resolver 领域契约
-internal/provider/       Apple、RSS、直接音频 Provider 与安全 HTTP Client
-internal/repository/     Import、Library、Notes 持久化与 PostgreSQL Job Queue
-internal/service/        Import Job 编排
+internal/domain/         Podcast 与 Transcription 领域规则
+internal/provider/       Podcast、音频、阿里云 ASR、OSS 与安全 HTTP Provider
+internal/repository/     业务持久化与 PostgreSQL Job Queue
+internal/service/        Import 与 Transcription Job 编排
 internal/worker/         Job 消费、续租、分类重试与崩溃隔离
 migrations/              版本化 SQL
 openapi/                 HTTP 契约
 ```
 
-实施记录见 `docs/architecture/phase-1-foundation.md`、`docs/architecture/phase-2-import.md`、`docs/architecture/phase-3-library.md` 与 `docs/architecture/phase-4-notes.md`。
+实施记录见 `docs/architecture/phase-1-foundation.md` 至 `docs/architecture/phase-5-transcription.md`；固定转录算法见 `docs/architecture/transcription.md`。

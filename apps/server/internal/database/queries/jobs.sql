@@ -90,6 +90,23 @@ WHERE id = sqlc.arg(job_id)
   AND locked_by = sqlc.arg(worker_id)
 RETURNING *;
 
+-- name: RescheduleJob :one
+UPDATE jobs
+SET status = 'queued',
+    stage = 'waiting_external',
+    attempt = GREATEST(attempt - 1, 0),
+    run_after = now() + (sqlc.arg(delay_milliseconds)::bigint * interval '1 millisecond'),
+    locked_by = NULL,
+    locked_at = NULL,
+    error_code = NULL,
+    error_message = NULL,
+    updated_at = now(),
+    completed_at = NULL
+WHERE id = sqlc.arg(job_id)
+  AND status = 'running'
+  AND locked_by = sqlc.arg(worker_id)
+RETURNING *;
+
 -- name: RequeueStaleJobs :many
 UPDATE jobs
 SET status = CASE WHEN attempt < max_attempts THEN 'queued' ELSE 'failed' END,

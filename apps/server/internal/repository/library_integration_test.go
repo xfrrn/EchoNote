@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"testing"
@@ -95,11 +96,42 @@ func TestLibraryLifecycle(t *testing.T) {
 	if err := library.Delete(ctx, otherUserID, podcastEpisodeID); !errors.Is(err, pgx.ErrNoRows) {
 		t.Fatalf("cross-user delete err=%v", err)
 	}
+	transcriptionRun, err := NewTranscriptionRepository(pool).Create(ctx, userID, directEpisodeID, "economy", RunConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		UPDATE transcription_runs
+		SET source_object_key = 'source-original', prepared_object_key = 'source-prepared.flac'
+		WHERE id = $1`, transcriptionRun.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO transcription_chunks (
+		    transcription_run_id, sequence, core_start_ms, core_end_ms, render_start_ms, render_end_ms,
+		    status, object_key, raw_result_object_key
+		) VALUES ($1, 0, 0, 1000, 0, 1000, 'ready', 'chunk.flac', 'raw.json')`, transcriptionRun.ID); err != nil {
+		t.Fatal(err)
+	}
 	if err := library.Delete(ctx, userID, podcastEpisodeID); err != nil {
 		t.Fatal(err)
 	}
 	if err := library.Delete(ctx, userID, directEpisodeID); err != nil {
 		t.Fatal(err)
+	}
+	var cleanupPayload []byte
+	if err := pool.QueryRow(ctx, `
+		SELECT payload FROM jobs
+		WHERE user_id = $1 AND type = 'cleanup_audio' AND entity_type = 'deleted_episode_audio'
+		  AND entity_id = $2 AND status = 'queued'`, userID, directEpisodeID).Scan(&cleanupPayload); err != nil {
+		t.Fatal(err)
+	}
+	var cleanup struct {
+		Scope string   `json:"scope"`
+		Keys  []string `json:"keys"`
+	}
+	if err := json.Unmarshal(cleanupPayload, &cleanup); err != nil || cleanup.Scope != "deleted_episode" || len(cleanup.Keys) != 4 {
+		t.Fatalf("cleanup=%+v err=%v", cleanup, err)
 	}
 
 	var episodes, sources, identities, podcasts, detachedImports int

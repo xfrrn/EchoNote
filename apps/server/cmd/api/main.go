@@ -50,6 +50,8 @@ func run() error {
 			repository.NewImportRepository(pool),
 			repository.NewLibraryRepository(pool),
 			repository.NewNotesRepository(pool),
+			repository.NewTranscriptionRepository(pool),
+			cfg.TranscriptionEnabled(),
 			cfg.UserID,
 			logger,
 		),

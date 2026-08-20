@@ -3,7 +3,9 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -20,6 +22,18 @@ type Config struct {
 	LogLevel           slog.Level
 	WorkerPollInterval time.Duration
 	WorkerLeaseTimeout time.Duration
+	ASRPollInterval    time.Duration
+	ASRProvider        string
+	ASRAPIKey          string
+	ASREndpoint        string
+	StorageProvider    string
+	StorageRegion      string
+	StorageEndpoint    string
+	StorageBucket      string
+	StorageAccessKey   string
+	StorageSecretKey   string
+	FFmpegPath         string
+	FFprobePath        string
 	UserID             pgtype.UUID
 }
 
@@ -29,6 +43,18 @@ func Load() (Config, error) {
 		DatabaseURL:        strings.TrimSpace(os.Getenv("DATABASE_URL")),
 		WorkerPollInterval: time.Second,
 		WorkerLeaseTimeout: 5 * time.Minute,
+		ASRPollInterval:    5 * time.Second,
+		ASRProvider:        strings.ToLower(strings.TrimSpace(os.Getenv("ASR_PROVIDER"))),
+		ASRAPIKey:          strings.TrimSpace(os.Getenv("ASR_API_KEY")),
+		ASREndpoint:        envOrDefault("ASR_ENDPOINT", "https://dashscope.aliyuncs.com"),
+		StorageProvider:    strings.ToLower(strings.TrimSpace(os.Getenv("STORAGE_PROVIDER"))),
+		StorageRegion:      strings.TrimSpace(os.Getenv("STORAGE_REGION")),
+		StorageEndpoint:    strings.TrimSpace(os.Getenv("STORAGE_ENDPOINT")),
+		StorageBucket:      strings.TrimSpace(os.Getenv("STORAGE_BUCKET")),
+		StorageAccessKey:   strings.TrimSpace(os.Getenv("STORAGE_ACCESS_KEY")),
+		StorageSecretKey:   strings.TrimSpace(os.Getenv("STORAGE_SECRET_KEY")),
+		FFmpegPath:         envOrDefault("FFMPEG_PATH", "ffmpeg"),
+		FFprobePath:        envOrDefault("FFPROBE_PATH", "ffprobe"),
 	}
 
 	if cfg.Environment != "development" && cfg.Environment != "production" && cfg.Environment != "test" {
@@ -57,8 +83,52 @@ func Load() (Config, error) {
 	if cfg.WorkerLeaseTimeout, err = positiveDuration("WORKER_LEASE_TIMEOUT", cfg.WorkerLeaseTimeout); err != nil {
 		return Config{}, err
 	}
+	if cfg.ASRPollInterval, err = positiveDuration("ASR_POLL_INTERVAL", cfg.ASRPollInterval); err != nil {
+		return Config{}, err
+	}
+	if cfg.ASRProvider != "" && cfg.ASRProvider != "aliyun" {
+		return Config{}, fmt.Errorf("ASR_PROVIDER must be aliyun")
+	}
+	if cfg.StorageProvider != "" && cfg.StorageProvider != "aliyun_oss" {
+		return Config{}, fmt.Errorf("STORAGE_PROVIDER must be aliyun_oss")
+	}
+	if cfg.StorageEndpoint != "" {
+		endpoint, parseErr := url.Parse(cfg.StorageEndpoint)
+		if parseErr != nil || endpoint.Scheme != "https" || endpoint.Host == "" || endpoint.User != nil {
+			return Config{}, fmt.Errorf("STORAGE_ENDPOINT must be an HTTPS URL without credentials")
+		}
+	}
+	if cfg.ASRProvider != "" {
+		endpoint, parseErr := url.Parse(cfg.ASREndpoint)
+		if parseErr != nil || endpoint.Scheme != "https" || endpoint.Host == "" || endpoint.User != nil {
+			return Config{}, fmt.Errorf("ASR_ENDPOINT must be an HTTPS URL without credentials")
+		}
+	}
 
 	return cfg, nil
+}
+
+func (cfg Config) ValidateTranscription() error {
+	missing := make([]string, 0, 7)
+	for key, value := range map[string]string{
+		"ASR_PROVIDER": cfg.ASRProvider, "ASR_API_KEY": cfg.ASRAPIKey,
+		"STORAGE_PROVIDER": cfg.StorageProvider, "STORAGE_REGION": cfg.StorageRegion,
+		"STORAGE_BUCKET": cfg.StorageBucket, "STORAGE_ACCESS_KEY": cfg.StorageAccessKey,
+		"STORAGE_SECRET_KEY": cfg.StorageSecretKey,
+	} {
+		if value == "" {
+			missing = append(missing, key)
+		}
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		return fmt.Errorf("transcription requires %s", strings.Join(missing, ", "))
+	}
+	return nil
+}
+
+func (cfg Config) TranscriptionEnabled() bool {
+	return cfg.ValidateTranscription() == nil
 }
 
 func envOrDefault(key, fallback string) string {

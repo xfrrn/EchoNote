@@ -373,6 +373,57 @@ func (q *Queries) RequeueStaleJobs(ctx context.Context, leaseMilliseconds int64)
 	return items, nil
 }
 
+const rescheduleJob = `-- name: RescheduleJob :one
+UPDATE jobs
+SET status = 'queued',
+    stage = 'waiting_external',
+    attempt = GREATEST(attempt - 1, 0),
+    run_after = now() + ($1::bigint * interval '1 millisecond'),
+    locked_by = NULL,
+    locked_at = NULL,
+    error_code = NULL,
+    error_message = NULL,
+    updated_at = now(),
+    completed_at = NULL
+WHERE id = $2
+  AND status = 'running'
+  AND locked_by = $3
+RETURNING id, user_id, type, entity_type, entity_id, payload, status, stage, priority, attempt, max_attempts, run_after, locked_by, locked_at, error_code, error_message, created_at, updated_at, completed_at
+`
+
+type RescheduleJobParams struct {
+	DelayMilliseconds int64       `json:"delay_milliseconds"`
+	JobID             pgtype.UUID `json:"job_id"`
+	WorkerID          *string     `json:"worker_id"`
+}
+
+func (q *Queries) RescheduleJob(ctx context.Context, arg RescheduleJobParams) (Job, error) {
+	row := q.db.QueryRow(ctx, rescheduleJob, arg.DelayMilliseconds, arg.JobID, arg.WorkerID)
+	var i Job
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Type,
+		&i.EntityType,
+		&i.EntityID,
+		&i.Payload,
+		&i.Status,
+		&i.Stage,
+		&i.Priority,
+		&i.Attempt,
+		&i.MaxAttempts,
+		&i.RunAfter,
+		&i.LockedBy,
+		&i.LockedAt,
+		&i.ErrorCode,
+		&i.ErrorMessage,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
+	)
+	return i, err
+}
+
 const retryOrFailJob = `-- name: RetryOrFailJob :one
 UPDATE jobs
 SET status = CASE WHEN $1::boolean AND attempt < max_attempts THEN 'queued' ELSE 'failed' END,

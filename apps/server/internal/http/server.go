@@ -27,12 +27,14 @@ type Pinger interface {
 }
 
 type Server struct {
-	database Pinger
-	imports  *repository.ImportRepository
-	library  *repository.LibraryRepository
-	notes    *repository.NotesRepository
-	userID   pgtype.UUID
-	logger   *slog.Logger
+	database             Pinger
+	imports              *repository.ImportRepository
+	library              *repository.LibraryRepository
+	notes                *repository.NotesRepository
+	transcriptions       *repository.TranscriptionRepository
+	transcriptionEnabled bool
+	userID               pgtype.UUID
+	logger               *slog.Logger
 }
 
 var _ ServerInterface = (*Server)(nil)
@@ -42,6 +44,8 @@ func NewRouter(
 	imports *repository.ImportRepository,
 	library *repository.LibraryRepository,
 	notes *repository.NotesRepository,
+	transcriptions *repository.TranscriptionRepository,
+	transcriptionEnabled bool,
 	userID pgtype.UUID,
 	logger *slog.Logger,
 ) http.Handler {
@@ -49,7 +53,11 @@ func NewRouter(
 	router.Use(middleware.RequestID)
 	router.Use(requestLogger(logger, formatUUID(userID)))
 	router.Use(recoverer(logger))
-	return HandlerFromMux(&Server{database: database, imports: imports, library: library, notes: notes, userID: userID, logger: logger}, router)
+	return HandlerFromMux(&Server{
+		database: database, imports: imports, library: library, notes: notes,
+		transcriptions: transcriptions, transcriptionEnabled: transcriptionEnabled,
+		userID: userID, logger: logger,
+	}, router)
 }
 
 func (s *Server) CreateCapture(w http.ResponseWriter, r *http.Request) {

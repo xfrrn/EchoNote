@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -60,6 +61,19 @@ func (r *LibraryRepository) Get(ctx context.Context, userID, episodeID pgtype.UU
 
 func (r *LibraryRepository) Delete(ctx context.Context, userID, episodeID pgtype.UUID) error {
 	_, err := withTx(ctx, r.pool, func(queries *db.Queries) (struct{}, error) {
+		objectKeys, err := queries.ListEpisodeTranscriptionObjectKeys(ctx, db.ListEpisodeTranscriptionObjectKeysParams{EpisodeID: episodeID, UserID: userID})
+		if err != nil {
+			return struct{}{}, err
+		}
+		transcriptionJobs, err := queries.CancelEpisodeTranscriptionJobs(ctx, db.CancelEpisodeTranscriptionJobsParams{UserID: userID, EpisodeID: episodeID})
+		if err != nil {
+			return struct{}{}, err
+		}
+		for _, job := range transcriptionJobs {
+			if err := createEvent(ctx, queries, job, "canceled"); err != nil {
+				return struct{}{}, err
+			}
+		}
 		jobs, err := queries.CancelEpisodeImportJobs(ctx, db.CancelEpisodeImportJobsParams{EpisodeID: episodeID, UserID: userID})
 		if err != nil {
 			return struct{}{}, err
@@ -75,6 +89,18 @@ func (r *LibraryRepository) Delete(ctx context.Context, userID, episodeID pgtype
 		}
 		if podcastID.Valid {
 			if err := queries.DeleteOrphanPodcast(ctx, db.DeleteOrphanPodcastParams{PodcastID: podcastID, UserID: userID}); err != nil {
+				return struct{}{}, err
+			}
+		}
+		if len(objectKeys) > 0 {
+			payload, err := json.Marshal(map[string]any{"scope": "deleted_episode", "keys": objectKeys})
+			if err != nil {
+				return struct{}{}, err
+			}
+			if _, err := enqueue(ctx, queries, NewJob{
+				UserID: userID, Type: CleanupAudioJobType, EntityType: "deleted_episode_audio",
+				EntityID: episodeID, Payload: payload, MaxAttempts: 3,
+			}); err != nil {
 				return struct{}{}, err
 			}
 		}

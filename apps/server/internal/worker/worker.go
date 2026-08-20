@@ -19,11 +19,24 @@ type Queue interface {
 	Claim(context.Context, string, []string) (db.Job, bool, error)
 	Heartbeat(context.Context, pgtype.UUID, string) error
 	Complete(context.Context, pgtype.UUID, string) error
+	Reschedule(context.Context, pgtype.UUID, string, time.Duration) error
 	RetryOrFail(context.Context, pgtype.UUID, string, string, string, time.Duration, bool) (string, error)
 	RequeueStale(context.Context, time.Duration) (int, error)
 }
 
 type Handler func(context.Context, db.Job) error
+
+type rescheduleError struct{ delay time.Duration }
+
+func (err rescheduleError) Error() string                  { return "job waiting for external task" }
+func (err rescheduleError) RescheduleAfter() time.Duration { return err.delay }
+
+func RescheduleAfter(delay time.Duration) error {
+	if delay <= 0 {
+		delay = time.Second
+	}
+	return rescheduleError{delay: delay}
+}
 
 type Worker struct {
 	queue        Queue
@@ -125,6 +138,13 @@ func (w *Worker) process(ctx context.Context, job db.Job) {
 			if err == nil {
 				if err := w.queue.Complete(transitionContext, job.ID, w.workerID); err != nil {
 					w.logger.Error("complete job", "job_id", jobID, "job_type", job.Type, "error", err)
+				}
+				return
+			}
+			var reschedule interface{ RescheduleAfter() time.Duration }
+			if errors.As(err, &reschedule) {
+				if transitionErr := w.queue.Reschedule(transitionContext, job.ID, w.workerID, reschedule.RescheduleAfter()); transitionErr != nil {
+					w.logger.Error("reschedule job", "job_id", jobID, "job_type", job.Type, "error", transitionErr)
 				}
 				return
 			}

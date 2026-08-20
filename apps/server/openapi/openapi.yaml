@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: EchoNote API
-  version: 0.4.0
+  version: 0.5.0
   description: EchoNote modular-monolith HTTP API.
 paths:
   /healthz:
@@ -307,6 +307,295 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
+  /api/v1/episodes/{episodeId}/transcriptions:
+    parameters:
+      - name: episodeId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: createTranscription
+      summary: Start a versioned Episode transcription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTranscriptionRequest"
+      responses:
+        "202":
+          description: Transcription queued.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscriptionRun"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/transcriptions/{runId}:
+    parameters:
+      - name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: getTranscription
+      summary: Get transcription workflow state
+      responses:
+        "200":
+          description: Transcription workflow state.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscriptionRun"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/transcriptions/{runId}/events:
+    parameters:
+      - name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: getTranscriptionEvents
+      summary: Stream durable transcription events
+      parameters:
+        - name: Last-Event-ID
+          in: header
+          required: false
+          description: Return durable events after this event ID.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+      responses:
+        "200":
+          description: SSE events. Event IDs can be resumed with Last-Event-ID.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/transcriptions/{runId}/retry:
+    parameters:
+      - name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: retryTranscription
+      summary: Retry only the failed transcription stage or chunks
+      responses:
+        "202":
+          description: Failed work queued again.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscriptionRun"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/transcriptions/{runId}/cancel:
+    parameters:
+      - name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: cancelTranscription
+      summary: Cancel local work and request cancellation of queued ASR tasks
+      responses:
+        "200":
+          description: Current run state after cancellation request.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscriptionRun"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/episodes/{episodeId}/transcript:
+    parameters:
+      - name: episodeId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: getEpisodeTranscript
+      summary: Get the active Transcript Version and Speakers
+      responses:
+        "200":
+          description: Active Transcript Version.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transcript"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/transcripts/{transcriptId}/segments:
+    parameters:
+      - name: transcriptId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: listTranscriptSegments
+      summary: List ordered Transcript Segments
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 2147483647
+            default: 0
+      responses:
+        "200":
+          description: Ordered Segment page.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscriptSegmentList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/transcripts/{transcriptId}/speakers/{speakerId}:
+    parameters:
+      - name: transcriptId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: speakerId
+        in: path
+        required: true
+        schema:
+          type: string
+    patch:
+      operationId: updateTranscriptSpeaker
+      summary: Rename a Global Speaker or update its role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTranscriptSpeakerRequest"
+      responses:
+        "200":
+          description: Updated Speaker.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscriptSpeaker"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/transcripts/{transcriptId}/speakers/merge:
+    parameters:
+      - name: transcriptId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: mergeTranscriptSpeakers
+      summary: Merge one Global Speaker into another
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MergeTranscriptSpeakersRequest"
+      responses:
+        "200":
+          description: Target Speaker after merge.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscriptSpeaker"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
 components:
   headers:
     RequestID:
@@ -325,6 +614,24 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
     NotFound:
       description: Resource not found.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: Resource state conflicts with the request.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ServiceUnavailable:
+      description: Required provider configuration is unavailable.
       headers:
         X-Request-ID:
           $ref: "#/components/headers/RequestID"
@@ -505,6 +812,274 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Note"
+    TranscriptionProfile:
+      type: string
+      enum:
+        - economy
+        - quality
+    CreateTranscriptionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - profile
+      properties:
+        profile:
+          $ref: "#/components/schemas/TranscriptionProfile"
+        language_hint:
+          type: string
+          minLength: 2
+          maxLength: 16
+        speaker_count:
+          type: integer
+          minimum: 2
+          maximum: 100
+    TranscriptionConfig:
+      type: object
+      additionalProperties: false
+      properties:
+        language_hint:
+          type: string
+        speaker_count:
+          type: integer
+    TranscriptionRunStatus:
+      type: string
+      enum:
+        - queued
+        - downloading
+        - preparing
+        - transcribing
+        - aligning
+        - merging
+        - completed
+        - failed
+        - canceled
+    TranscriptionError:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+    TranscriptionRun:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - episode_id
+        - profile
+        - provider
+        - model
+        - status
+        - stage
+        - workflow_version
+        - config
+        - total_chunks
+        - completed_chunks
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+        episode_id:
+          type: string
+        profile:
+          $ref: "#/components/schemas/TranscriptionProfile"
+        provider:
+          type: string
+        model:
+          type: string
+        status:
+          $ref: "#/components/schemas/TranscriptionRunStatus"
+        stage:
+          type: string
+        workflow_version:
+          type: integer
+        config:
+          $ref: "#/components/schemas/TranscriptionConfig"
+        duration_ms:
+          type: integer
+          format: int64
+          minimum: 1
+        total_chunks:
+          type: integer
+          minimum: 0
+        completed_chunks:
+          type: integer
+          minimum: 0
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        error:
+          $ref: "#/components/schemas/TranscriptionError"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    TranscriptSpeaker:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - stable_key
+        - display_name
+        - role
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+        stable_key:
+          type: string
+        display_name:
+          type: string
+        role:
+          type: string
+        speaker_profile_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    Transcript:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - episode_id
+        - transcription_run_id
+        - version
+        - is_active
+        - status
+        - speakers
+        - created_at
+      properties:
+        id:
+          type: string
+        episode_id:
+          type: string
+        transcription_run_id:
+          type: string
+        version:
+          type: integer
+        is_active:
+          type: boolean
+        status:
+          type: string
+        speakers:
+          type: array
+          items:
+            $ref: "#/components/schemas/TranscriptSpeaker"
+        created_at:
+          type: string
+          format: date-time
+    TranscriptWord:
+      type: object
+      additionalProperties: false
+      required:
+        - start_ms
+        - end_ms
+        - text
+      properties:
+        start_ms:
+          type: integer
+          format: int64
+        end_ms:
+          type: integer
+          format: int64
+        text:
+          type: string
+        punctuation:
+          type: string
+    TranscriptSegment:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - speaker_id
+        - sequence
+        - start_ms
+        - end_ms
+        - text
+        - words
+        - source_chunk_id
+      properties:
+        id:
+          type: string
+        speaker_id:
+          type: string
+        sequence:
+          type: integer
+        start_ms:
+          type: integer
+          format: int64
+        end_ms:
+          type: integer
+          format: int64
+        text:
+          type: string
+        words:
+          type: array
+          items:
+            $ref: "#/components/schemas/TranscriptWord"
+        source_chunk_id:
+          type: string
+    TranscriptSegmentList:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - total
+        - limit
+        - offset
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TranscriptSegment"
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+        limit:
+          type: integer
+        offset:
+          type: integer
+    UpdateTranscriptSpeakerRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - display_name
+      properties:
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        role:
+          type: string
+          minLength: 1
+          maxLength: 100
+    MergeTranscriptSpeakersRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - source_speaker_id
+        - target_speaker_id
+      properties:
+        source_speaker_id:
+          type: string
+        target_speaker_id:
+          type: string
     ResolveStatus:
       type: string
       enum:

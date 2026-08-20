@@ -35,7 +35,7 @@ func TestHealthEndpoints(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			router := NewRouter(pingerFunc(func(context.Context) error { return test.pingError }), nil, nil, nil, pgtype.UUID{}, logger)
+			router := NewRouter(pingerFunc(func(context.Context) error { return test.pingError }), nil, nil, nil, nil, false, pgtype.UUID{}, logger)
 			request := httptest.NewRequest(http.MethodGet, test.path, nil)
 			response := httptest.NewRecorder()
 			router.ServeHTTP(response, request)
@@ -58,7 +58,7 @@ func TestHealthEndpoints(t *testing.T) {
 
 func TestImportRejectsInvalidInputBeforeDatabase(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	router := NewRouter(pingerFunc(func(context.Context) error { return nil }), nil, nil, nil, pgtype.UUID{}, logger)
+	router := NewRouter(pingerFunc(func(context.Context) error { return nil }), nil, nil, nil, nil, false, pgtype.UUID{}, logger)
 	tests := []struct {
 		method string
 		path   string
@@ -81,7 +81,7 @@ func TestImportRejectsInvalidInputBeforeDatabase(t *testing.T) {
 
 func TestLibraryRejectsInvalidParametersBeforeDatabase(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	router := NewRouter(pingerFunc(func(context.Context) error { return nil }), nil, nil, nil, pgtype.UUID{}, logger)
+	router := NewRouter(pingerFunc(func(context.Context) error { return nil }), nil, nil, nil, nil, false, pgtype.UUID{}, logger)
 	tests := []struct {
 		method string
 		path   string
@@ -104,7 +104,7 @@ func TestLibraryRejectsInvalidParametersBeforeDatabase(t *testing.T) {
 
 func TestNotesRejectInvalidInputBeforeDatabase(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	router := NewRouter(pingerFunc(func(context.Context) error { return nil }), nil, nil, nil, pgtype.UUID{}, logger)
+	router := NewRouter(pingerFunc(func(context.Context) error { return nil }), nil, nil, nil, nil, false, pgtype.UUID{}, logger)
 	const (
 		id        = "11111111-1111-4111-8111-111111111111"
 		otherID   = "22222222-2222-4222-8222-222222222222"
@@ -133,6 +133,42 @@ func TestNotesRejectInvalidInputBeforeDatabase(t *testing.T) {
 		router.ServeHTTP(response, request)
 		if response.Code != http.StatusBadRequest {
 			t.Fatalf("%s %s status=%d body=%s", test.method, test.path, response.Code, response.Body.String())
+		}
+	}
+}
+
+func TestTranscriptionRejectsInvalidInputBeforeDatabase(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	router := NewRouter(pingerFunc(func(context.Context) error { return nil }), nil, nil, nil, nil, false, pgtype.UUID{}, logger)
+	const (
+		id      = "11111111-1111-4111-8111-111111111111"
+		otherID = "22222222-2222-4222-8222-222222222222"
+	)
+	tests := []struct {
+		method, path, body string
+		want               int
+	}{
+		{http.MethodPost, "/api/v1/episodes/not-a-uuid/transcriptions", `{"profile":"economy"}`, http.StatusBadRequest},
+		{http.MethodPost, "/api/v1/episodes/" + id + "/transcriptions", `{"profile":"fast"}`, http.StatusBadRequest},
+		{http.MethodPost, "/api/v1/episodes/" + id + "/transcriptions", `{"profile":"economy","language_hint":"../../"}`, http.StatusBadRequest},
+		{http.MethodPost, "/api/v1/episodes/" + id + "/transcriptions", `{"profile":"economy"}`, http.StatusServiceUnavailable},
+		{http.MethodGet, "/api/v1/transcriptions/not-a-uuid", "", http.StatusBadRequest},
+		{http.MethodGet, "/api/v1/transcriptions/not-a-uuid/events", "", http.StatusBadRequest},
+		{http.MethodPost, "/api/v1/transcriptions/not-a-uuid/retry", "", http.StatusBadRequest},
+		{http.MethodPost, "/api/v1/transcriptions/not-a-uuid/cancel", "", http.StatusBadRequest},
+		{http.MethodGet, "/api/v1/episodes/not-a-uuid/transcript", "", http.StatusBadRequest},
+		{http.MethodGet, "/api/v1/transcripts/not-a-uuid/segments", "", http.StatusBadRequest},
+		{http.MethodGet, "/api/v1/transcripts/" + id + "/segments?limit=0", "", http.StatusBadRequest},
+		{http.MethodPatch, "/api/v1/transcripts/" + id + "/speakers/not-a-uuid", `{"display_name":"Host"}`, http.StatusBadRequest},
+		{http.MethodPost, "/api/v1/transcripts/" + id + "/speakers/merge", `{"source_speaker_id":"` + otherID + `","target_speaker_id":"` + otherID + `"}`, http.StatusBadRequest},
+	}
+	for _, test := range tests {
+		request := httptest.NewRequest(test.method, test.path, strings.NewReader(test.body))
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+		if response.Code != test.want {
+			t.Fatalf("%s %s status=%d want=%d body=%s", test.method, test.path, response.Code, test.want, response.Body.String())
 		}
 	}
 }

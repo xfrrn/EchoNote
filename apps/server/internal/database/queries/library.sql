@@ -96,7 +96,7 @@ WHERE id = sqlc.arg(episode_id)
 RETURNING podcast_id;
 
 -- name: CancelEpisodeImportJobs :many
-UPDATE jobs
+UPDATE jobs AS job
 SET status = 'canceled',
     stage = 'canceled',
     locked_by = NULL,
@@ -105,14 +105,67 @@ SET status = 'canceled',
     error_message = NULL,
     updated_at = now(),
     completed_at = now()
-WHERE id IN (
+WHERE job.id IN (
     SELECT import_record.job_id
     FROM imports AS import_record
     WHERE import_record.episode_id = sqlc.arg(episode_id)
       AND import_record.user_id = sqlc.arg(user_id)
 )
-  AND status IN ('queued', 'running')
-RETURNING *;
+  AND job.status IN ('queued', 'running')
+RETURNING job.*;
+
+-- name: CancelEpisodeTranscriptionJobs :many
+UPDATE jobs AS job
+SET status = 'canceled',
+    stage = 'canceled',
+    locked_by = NULL,
+    locked_at = NULL,
+    error_code = NULL,
+    error_message = NULL,
+    updated_at = now(),
+    completed_at = now()
+WHERE job.user_id = sqlc.arg(user_id)
+  AND job.status IN ('queued', 'running')
+  AND (
+      (job.entity_type = 'transcription_run' AND job.entity_id IN (
+          SELECT run.id FROM transcription_runs AS run WHERE run.episode_id = sqlc.arg(episode_id)
+      ))
+      OR
+      (job.entity_type = 'transcription_chunk' AND job.entity_id IN (
+          SELECT chunk.id
+          FROM transcription_chunks AS chunk
+          JOIN transcription_runs AS run ON run.id = chunk.transcription_run_id
+          WHERE run.episode_id = sqlc.arg(episode_id)
+      ))
+  )
+RETURNING job.*;
+
+-- name: ListEpisodeTranscriptionObjectKeys :many
+SELECT object_key::text
+FROM (
+    SELECT source_object_key AS object_key
+    FROM transcription_runs AS run
+    WHERE run.episode_id = sqlc.arg(episode_id)
+      AND run.user_id = sqlc.arg(user_id)
+    UNION ALL
+    SELECT prepared_object_key AS object_key
+    FROM transcription_runs AS run
+    WHERE run.episode_id = sqlc.arg(episode_id)
+      AND run.user_id = sqlc.arg(user_id)
+    UNION ALL
+    SELECT chunk.object_key
+    FROM transcription_chunks AS chunk
+    JOIN transcription_runs AS run ON run.id = chunk.transcription_run_id
+    WHERE run.episode_id = sqlc.arg(episode_id)
+      AND run.user_id = sqlc.arg(user_id)
+    UNION ALL
+    SELECT chunk.raw_result_object_key
+    FROM transcription_chunks AS chunk
+    JOIN transcription_runs AS run ON run.id = chunk.transcription_run_id
+    WHERE run.episode_id = sqlc.arg(episode_id)
+      AND run.user_id = sqlc.arg(user_id)
+) AS objects
+WHERE object_key IS NOT NULL;
 
 -- name: DeleteOrphanPodcast :exec
 DELETE FROM podcasts AS podcast
