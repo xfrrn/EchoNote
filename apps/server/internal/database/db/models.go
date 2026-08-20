@@ -8,6 +8,39 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AiArtifact struct {
+	ID                  pgtype.UUID        `json:"id"`
+	UserID              pgtype.UUID        `json:"user_id"`
+	EpisodeID           pgtype.UUID        `json:"episode_id"`
+	TranscriptVersionID pgtype.UUID        `json:"transcript_version_id"`
+	JobID               pgtype.UUID        `json:"job_id"`
+	ArtifactType        string             `json:"artifact_type"`
+	Model               string             `json:"model"`
+	PromptVersion       string             `json:"prompt_version"`
+	NotesRevision       string             `json:"notes_revision"`
+	InputHash           string             `json:"input_hash"`
+	Status              string             `json:"status"`
+	Result              []byte             `json:"result"`
+	SearchText          string             `json:"search_text"`
+	ErrorCode           *string            `json:"error_code"`
+	ErrorMessage        *string            `json:"error_message"`
+	InputTokens         int32              `json:"input_tokens"`
+	OutputTokens        int32              `json:"output_tokens"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	CompletedAt         pgtype.Timestamptz `json:"completed_at"`
+}
+
+type Conversation struct {
+	ID        pgtype.UUID        `json:"id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	EpisodeID pgtype.UUID        `json:"episode_id"`
+	Scope     string             `json:"scope"`
+	Title     string             `json:"title"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Episode struct {
 	ID                  pgtype.UUID        `json:"id"`
 	UserID              pgtype.UUID        `json:"user_id"`
@@ -83,6 +116,34 @@ type JobEvent struct {
 	Stage     string             `json:"stage"`
 	Data      []byte             `json:"data"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type Message struct {
+	ID               pgtype.UUID        `json:"id"`
+	ConversationID   pgtype.UUID        `json:"conversation_id"`
+	ReplyToMessageID pgtype.UUID        `json:"reply_to_message_id"`
+	ClientMessageID  pgtype.UUID        `json:"client_message_id"`
+	Role             string             `json:"role"`
+	Status           string             `json:"status"`
+	Content          string             `json:"content"`
+	Model            *string            `json:"model"`
+	ErrorCode        *string            `json:"error_code"`
+	ErrorMessage     *string            `json:"error_message"`
+	InputTokens      int32              `json:"input_tokens"`
+	OutputTokens     int32              `json:"output_tokens"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	CompletedAt      pgtype.Timestamptz `json:"completed_at"`
+}
+
+type MessageCitation struct {
+	ID                  pgtype.UUID        `json:"id"`
+	MessageID           pgtype.UUID        `json:"message_id"`
+	Position            int32              `json:"position"`
+	TranscriptSegmentID pgtype.UUID        `json:"transcript_segment_id"`
+	NoteID              pgtype.UUID        `json:"note_id"`
+	Excerpt             string             `json:"excerpt"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 }
 
 type Note struct {

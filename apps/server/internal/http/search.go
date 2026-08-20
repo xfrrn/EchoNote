@@ -14,7 +14,7 @@ import (
 
 func (s *Server) SearchContent(w http.ResponseWriter, r *http.Request, params SearchContentParams) {
 	query := strings.TrimSpace(params.Q)
-	scope, limit := Library, 20
+	scope, limit := SearchScopeLibrary, 20
 	if params.Scope != nil {
 		scope = *params.Scope
 	}
@@ -26,7 +26,7 @@ func (s *Server) SearchContent(w http.ResponseWriter, r *http.Request, params Se
 		return
 	}
 	episodeID := pgtype.UUID{}
-	if scope == Episode {
+	if scope == SearchScopeEpisode {
 		if params.EpisodeId == nil {
 			writeAPIError(w, http.StatusBadRequest, "INVALID_SEARCH_SCOPE", "episode scope requires episode_id")
 			return
@@ -68,7 +68,7 @@ func (s *Server) ReindexSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	episodeID := pgtype.UUID{}
-	if request.Scope == Episode {
+	if request.Scope == SearchScopeEpisode {
 		if request.EpisodeId == nil {
 			writeAPIError(w, http.StatusBadRequest, "INVALID_SEARCH_SCOPE", "episode scope requires episode_id")
 			return

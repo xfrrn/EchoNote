@@ -137,7 +137,7 @@ midpoint = start_ms + (end_ms - start_ms) / 2
 → 保留旧 Version
 ```
 
-任何时候同一 Episode 最多一个 `is_active=true`。ASR 生成的 Version 内容不被下一次转录覆盖。用户重命名与合并 Speaker 属于当前 Version 的人工校正元数据；合并会更新该 Version 的 Segment Speaker。Phase 6 已在同一事务创建 Search 重建 Job；Phase 7 继续负责把关联 AI Artifact 标记为 stale。
+任何时候同一 Episode 最多一个 `is_active=true`。ASR 生成的 Version 内容不被下一次转录覆盖。用户重命名与合并 Speaker 属于当前 Version 的人工校正元数据；合并会更新该 Version 的 Segment Speaker。Phase 6 已在同一事务创建 Search 重建 Job；Phase 7 已在同一事务把关联 AI Artifact 标记为 stale 并取消未完成的生成 Job。
 
 ## Job 工作流
 

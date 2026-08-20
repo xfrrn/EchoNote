@@ -66,7 +66,7 @@ func TestSearchHTTPKeywordAndReindex(t *testing.T) {
 	}
 	router := NewRouter(
 		pool, imports, repository.NewLibraryRepository(pool), notes, nil,
-		service.NewSearchService(searchRepository, nil), false, userID,
+		service.NewSearchService(searchRepository, nil), nil, false, userID,
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 	)
 	query := url.Values{"q": {"关键字"}, "scope": {"episode"}, "episode_id": {formatUUID(episodeID)}}

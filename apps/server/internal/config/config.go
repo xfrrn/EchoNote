@@ -29,6 +29,10 @@ type Config struct {
 	EmbeddingProvider  string
 	EmbeddingAPIKey    string
 	EmbeddingEndpoint  string
+	LLMProvider        string
+	LLMAPIKey          string
+	LLMEndpoint        string
+	LLMModel           string
 	StorageProvider    string
 	StorageRegion      string
 	StorageEndpoint    string
@@ -53,6 +57,10 @@ func Load() (Config, error) {
 		EmbeddingProvider:  strings.ToLower(strings.TrimSpace(os.Getenv("EMBEDDING_PROVIDER"))),
 		EmbeddingAPIKey:    strings.TrimSpace(os.Getenv("EMBEDDING_API_KEY")),
 		EmbeddingEndpoint:  envOrDefault("EMBEDDING_ENDPOINT", "https://dashscope.aliyuncs.com"),
+		LLMProvider:        strings.ToLower(strings.TrimSpace(os.Getenv("LLM_PROVIDER"))),
+		LLMAPIKey:          strings.TrimSpace(os.Getenv("LLM_API_KEY")),
+		LLMEndpoint:        envOrDefault("LLM_ENDPOINT", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
+		LLMModel:           envOrDefault("LLM_MODEL", "qwen-plus"),
 		StorageProvider:    strings.ToLower(strings.TrimSpace(os.Getenv("STORAGE_PROVIDER"))),
 		StorageRegion:      strings.TrimSpace(os.Getenv("STORAGE_REGION")),
 		StorageEndpoint:    strings.TrimSpace(os.Getenv("STORAGE_ENDPOINT")),
@@ -101,6 +109,9 @@ func Load() (Config, error) {
 	if cfg.EmbeddingProvider != "" && cfg.EmbeddingProvider != "aliyun" {
 		return Config{}, fmt.Errorf("EMBEDDING_PROVIDER must be aliyun")
 	}
+	if cfg.LLMProvider != "" && cfg.LLMProvider != "aliyun" {
+		return Config{}, fmt.Errorf("LLM_PROVIDER must be aliyun")
+	}
 	if cfg.StorageEndpoint != "" {
 		endpoint, parseErr := url.Parse(cfg.StorageEndpoint)
 		if parseErr != nil || endpoint.Scheme != "https" || endpoint.Host == "" || endpoint.User != nil {
@@ -117,6 +128,12 @@ func Load() (Config, error) {
 		endpoint, parseErr := url.Parse(cfg.EmbeddingEndpoint)
 		if parseErr != nil || endpoint.Scheme != "https" || endpoint.Host == "" || endpoint.User != nil {
 			return Config{}, fmt.Errorf("EMBEDDING_ENDPOINT must be an HTTPS URL without credentials")
+		}
+	}
+	if cfg.LLMProvider != "" {
+		endpoint, parseErr := url.Parse(cfg.LLMEndpoint)
+		if parseErr != nil || endpoint.Scheme != "https" || endpoint.Host == "" || endpoint.User != nil {
+			return Config{}, fmt.Errorf("LLM_ENDPOINT must be an HTTPS URL without credentials")
 		}
 	}
 
@@ -162,6 +179,24 @@ func (cfg Config) ValidateEmbedding() error {
 
 func (cfg Config) EmbeddingEnabled() bool {
 	return cfg.ValidateEmbedding() == nil
+}
+
+func (cfg Config) ValidateLLM() error {
+	missing := make([]string, 0, 2)
+	if cfg.LLMProvider == "" {
+		missing = append(missing, "LLM_PROVIDER")
+	}
+	if cfg.LLMAPIKey == "" {
+		missing = append(missing, "LLM_API_KEY")
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("AI requires %s", strings.Join(missing, ", "))
+	}
+	return nil
+}
+
+func (cfg Config) LLMEnabled() bool {
+	return cfg.ValidateLLM() == nil
 }
 
 func envOrDefault(key, fallback string) string {

@@ -204,6 +204,9 @@ func (r *ImportRepository) SaveResolved(
 			return pgtype.UUID{}, fmt.Errorf("complete import: %w", err)
 		}
 		if captureEpisodeID.Valid {
+			if err := markEpisodeAIStale(ctx, queries, userID, episodeID); err != nil {
+				return pgtype.UUID{}, err
+			}
 			if err := enqueueSearchBuild(ctx, queries, userID, episodeID); err != nil {
 				return pgtype.UUID{}, err
 			}

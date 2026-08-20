@@ -773,6 +773,16 @@ conversation_scope = library
 
 第一版只完成单期问答，之后再开放整个资料库问答。
 
+### Phase 7 实施澄清
+
+第一版将一句话总结、核心观点、人物观点、值得回顾和笔记关联合并为一个 `episode_summary` Artifact，以一次付费调用满足当前页面；需要独立刷新时再拆分类型。`notes_revision` 使用规范 Notes JSON 的 SHA-256 内容摘要，`input_hash` 覆盖 Transcript、Speaker、Segment 与 Notes 完整输入，避免多条写入路径维护计数器时漏增版本。
+
+模型只返回已有来源 ID 和生成文本；Speaker 名称、原始 Quote、时间与 Note 内容由后端从本次输入补全。Artifact 增加派生 `search_text` 供 Phase 6 Search 重建，不作为业务真相。付费 Artifact Job 最多尝试一次，只有用户再次显式请求才会重试。
+
+单期 Conversation 第一版只把 Transcript Segment 和 Note 作为可引用上下文，不把已有 Artifact 再喂给模型。Artifact 是派生内容且当前未逐项保存一级来源，作为上下文会放大旧错误；它仍进入普通 Search，待 Artifact 具备逐项 Citation 后再评估加入问答 Retrieval。
+
+Conversation 的流式答案在末尾携带内部 Citation Envelope。后端只接受本次 Retrieval 白名单内的 Segment / Note ID，验证后才原子保存答案与 Citation。SSE 已发送的部分 Delta 无法撤回；验证失败时消息记为 `failed`、不发送 `done`，客户端必须使用新的 `client_message_id` 重试。
+
 ---
 
 ## 3.10 Exports：导出和分享到备忘录

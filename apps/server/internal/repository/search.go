@@ -260,7 +260,7 @@ func searchInputs(ctx context.Context, queries *db.Queries, userID, episodeID pg
 	if err != nil {
 		return nil, err
 	}
-	inputs := make([]searchDocumentInput, 0, len(notes)+1)
+	inputs := make([]searchDocumentInput, 0, len(notes)+2)
 	for _, note := range notes {
 		chunk := searchdomain.Chunk{Index: 0, Text: note.Content}
 		inputs = append(inputs, searchDocumentInput{
@@ -299,6 +299,19 @@ func searchInputs(ctx context.Context, queries *db.Queries, userID, episodeID pg
 			contentHash: searchdomain.DocumentHash("transcript", idText(version.ID), content, chunks), chunks: chunks,
 		})
 	}
+	artifact, err := queries.GetReadyAIArtifactForSearch(ctx, db.GetReadyAIArtifactForSearchParams{UserID: userID, EpisodeID: episodeID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return inputs, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	chunk := searchdomain.Chunk{Index: 0, Text: artifact.SearchText}
+	inputs = append(inputs, searchDocumentInput{
+		documentType: "ai_artifact", sourceID: artifact.ID, content: artifact.SearchText,
+		contentHash: searchdomain.DocumentHash("ai_artifact", idText(artifact.ID), artifact.SearchText, []searchdomain.Chunk{chunk}),
+		chunks:      []searchdomain.Chunk{chunk},
+	})
 	return inputs, nil
 }
 

@@ -14,10 +14,12 @@ import (
 
 	"github.com/Actify/echonote/apps/server/internal/config"
 	"github.com/Actify/echonote/apps/server/internal/database"
+	aidomain "github.com/Actify/echonote/apps/server/internal/domain/ai"
 	searchdomain "github.com/Actify/echonote/apps/server/internal/domain/search"
 	httpapi "github.com/Actify/echonote/apps/server/internal/http"
 	"github.com/Actify/echonote/apps/server/internal/logging"
 	"github.com/Actify/echonote/apps/server/internal/provider/embedding"
+	llmprovider "github.com/Actify/echonote/apps/server/internal/provider/llm"
 	"github.com/Actify/echonote/apps/server/internal/repository"
 	"github.com/Actify/echonote/apps/server/internal/service"
 )
@@ -55,6 +57,17 @@ func run() error {
 		logger.Warn("semantic search disabled", "reason", cfg.ValidateEmbedding())
 	}
 	searchRepository := repository.NewSearchRepository(pool)
+	searchService := service.NewSearchService(searchRepository, embeddingProvider)
+	var llmProvider aidomain.LLMProvider
+	if cfg.LLMEnabled() {
+		llmProvider, err = llmprovider.NewAliyun(cfg.LLMEndpoint, cfg.LLMModel, cfg.LLMAPIKey, nil)
+		if err != nil {
+			return fmt.Errorf("configure LLM: %w", err)
+		}
+	} else {
+		logger.Warn("AI generation disabled", "reason", cfg.ValidateLLM())
+	}
+	aiService := service.NewAIService(repository.NewAIRepository(pool), searchService, llmProvider)
 
 	server := &http.Server{
 		Addr: ":" + strconv.Itoa(cfg.ServerPort),
@@ -64,7 +77,8 @@ func run() error {
 			repository.NewLibraryRepository(pool),
 			repository.NewNotesRepository(pool),
 			repository.NewTranscriptionRepository(pool),
-			service.NewSearchService(searchRepository, embeddingProvider),
+			searchService,
+			aiService,
 			cfg.TranscriptionEnabled(),
 			cfg.UserID,
 			logger,

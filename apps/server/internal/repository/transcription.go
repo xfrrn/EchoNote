@@ -487,6 +487,9 @@ func (r *TranscriptionRepository) ActivateTranscript(
 			}
 			return db.TranscriptVersion{}, errors.New("run is not ready to merge")
 		}
+		if _, err := queries.LockOwnedEpisodeForAI(ctx, db.LockOwnedEpisodeForAIParams{EpisodeID: run.EpisodeID, UserID: run.UserID}); err != nil {
+			return db.TranscriptVersion{}, err
+		}
 		next, err := queries.NextTranscriptVersion(ctx, run.EpisodeID)
 		if err != nil {
 			return db.TranscriptVersion{}, err
@@ -537,6 +540,9 @@ func (r *TranscriptionRepository) ActivateTranscript(
 			return db.TranscriptVersion{}, err
 		}
 		if err := transcriptionEvent(ctx, queries, run.ID, "completed", nil); err != nil {
+			return db.TranscriptVersion{}, err
+		}
+		if err := markEpisodeAIStale(ctx, queries, run.UserID, run.EpisodeID); err != nil {
 			return db.TranscriptVersion{}, err
 		}
 		if err := enqueueSearchBuild(ctx, queries, run.UserID, run.EpisodeID); err != nil {
@@ -810,6 +816,13 @@ func (r *TranscriptionRepository) RenameSpeaker(ctx context.Context, userID, tra
 		return db.TranscriptSpeaker{}, errors.New("display name is required")
 	}
 	speaker, err := withTx(ctx, r.pool, func(queries *db.Queries) (db.TranscriptSpeaker, error) {
+		version, err := queries.GetTranscriptVersion(ctx, db.GetTranscriptVersionParams{TranscriptID: transcriptID, UserID: userID})
+		if err != nil {
+			return db.TranscriptSpeaker{}, err
+		}
+		if _, err := queries.LockOwnedEpisodeForAI(ctx, db.LockOwnedEpisodeForAIParams{EpisodeID: version.EpisodeID, UserID: userID}); err != nil {
+			return db.TranscriptSpeaker{}, err
+		}
 		current, err := queries.LockTranscriptSpeaker(ctx, db.LockTranscriptSpeakerParams{SpeakerID: speakerID, TranscriptID: transcriptID, UserID: userID})
 		if err != nil {
 			return db.TranscriptSpeaker{}, err
@@ -823,8 +836,7 @@ func (r *TranscriptionRepository) RenameSpeaker(ctx context.Context, userID, tra
 		if err != nil {
 			return db.TranscriptSpeaker{}, err
 		}
-		version, err := queries.GetTranscriptVersion(ctx, db.GetTranscriptVersionParams{TranscriptID: transcriptID, UserID: userID})
-		if err != nil {
+		if err := markEpisodeAIStale(ctx, queries, userID, version.EpisodeID); err != nil {
 			return db.TranscriptSpeaker{}, err
 		}
 		if err := enqueueSearchBuild(ctx, queries, userID, version.EpisodeID); err != nil {
@@ -840,6 +852,13 @@ func (r *TranscriptionRepository) MergeSpeakers(ctx context.Context, userID, tra
 		return db.TranscriptSpeaker{}, errors.New("source and target speakers must differ")
 	}
 	target, err := withTx(ctx, r.pool, func(queries *db.Queries) (db.TranscriptSpeaker, error) {
+		version, err := queries.GetTranscriptVersion(ctx, db.GetTranscriptVersionParams{TranscriptID: transcriptID, UserID: userID})
+		if err != nil {
+			return db.TranscriptSpeaker{}, err
+		}
+		if _, err := queries.LockOwnedEpisodeForAI(ctx, db.LockOwnedEpisodeForAIParams{EpisodeID: version.EpisodeID, UserID: userID}); err != nil {
+			return db.TranscriptSpeaker{}, err
+		}
 		firstID, secondID := sourceID, targetID
 		if firstID.String() > secondID.String() {
 			firstID, secondID = secondID, firstID
@@ -862,8 +881,7 @@ func (r *TranscriptionRepository) MergeSpeakers(ctx context.Context, userID, tra
 		if err := queries.DeleteTranscriptSpeaker(ctx, db.DeleteTranscriptSpeakerParams{SpeakerID: sourceID, TranscriptID: transcriptID}); err != nil {
 			return db.TranscriptSpeaker{}, err
 		}
-		version, err := queries.GetTranscriptVersion(ctx, db.GetTranscriptVersionParams{TranscriptID: transcriptID, UserID: userID})
-		if err != nil {
+		if err := markEpisodeAIStale(ctx, queries, userID, version.EpisodeID); err != nil {
 			return db.TranscriptSpeaker{}, err
 		}
 		if err := enqueueSearchBuild(ctx, queries, userID, version.EpisodeID); err != nil {

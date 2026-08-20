@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: EchoNote API
-  version: 0.6.0
+  version: 0.7.0
   description: EchoNote modular-monolith HTTP API.
 paths:
   /healthz:
@@ -375,6 +375,157 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/episodes/{episodeId}/ai/artifacts:
+    parameters:
+      - name: episodeId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: listEpisodeAIArtifacts
+      summary: List cached and historical AI Artifacts for an Episode
+      responses:
+        "200":
+          description: AI Artifact history, newest first.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AIArtifactList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      operationId: requestEpisodeAIArtifact
+      summary: Return a cached Episode summary or enqueue on-demand generation
+      responses:
+        "200":
+          description: An input-identical cached Artifact was returned.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AIArtifact"
+        "202":
+          description: Generation is queued or already in progress.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AIArtifact"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/conversations:
+    post:
+      operationId: createConversation
+      summary: Create an Episode-scoped AI Conversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateConversationRequest"
+      responses:
+        "201":
+          description: Conversation created.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/conversations/{conversationId}:
+    parameters:
+      - name: conversationId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: getConversation
+      summary: Get a Conversation with durable Messages and Citations
+      responses:
+        "200":
+          description: Conversation detail.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/conversations/{conversationId}/messages:
+    parameters:
+      - name: conversationId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: streamConversationMessage
+      summary: Ask an Episode question and stream a citation-validated answer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateConversationMessageRequest"
+      responses:
+        "200":
+          description: >-
+            SSE events. delta data is {"text":"..."}; citation data is an
+            AICitation; done data is {"message_id":"...","replayed":false};
+            error data is the standard APIError object.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
         "500":
           $ref: "#/components/responses/InternalError"
   /api/v1/episodes/{episodeId}/transcriptions:
@@ -972,6 +1123,325 @@ components:
         queued:
           type: integer
           minimum: 0
+    AIArtifactStatus:
+      type: string
+      enum:
+        - queued
+        - generating
+        - ready
+        - stale
+        - failed
+    AIArtifactType:
+      type: string
+      enum:
+        - episode_summary
+    AISpeakerView:
+      type: object
+      additionalProperties: false
+      required:
+        - speaker_id
+        - speaker_name
+        - points
+      properties:
+        speaker_id:
+          type: string
+        speaker_name:
+          type: string
+        points:
+          type: array
+          items:
+            type: string
+    AIWorthReviewing:
+      type: object
+      additionalProperties: false
+      required:
+        - transcript_segment_id
+        - speaker_id
+        - speaker_name
+        - start_ms
+        - end_ms
+        - quote
+        - reason
+      properties:
+        transcript_segment_id:
+          type: string
+        speaker_id:
+          type: string
+        speaker_name:
+          type: string
+        start_ms:
+          type: integer
+          format: int64
+          minimum: 0
+        end_ms:
+          type: integer
+          format: int64
+          minimum: 1
+        quote:
+          type: string
+        reason:
+          type: string
+    AINoteConnection:
+      type: object
+      additionalProperties: false
+      required:
+        - note_id
+        - note
+        - insight
+      properties:
+        note_id:
+          type: string
+        note:
+          type: string
+        insight:
+          type: string
+    AIArtifactResult:
+      type: object
+      additionalProperties: false
+      required:
+        - one_sentence_summary
+        - key_points
+        - speaker_views
+        - worth_reviewing
+        - note_connections
+      properties:
+        one_sentence_summary:
+          type: string
+        key_points:
+          type: array
+          items:
+            type: string
+        speaker_views:
+          type: array
+          items:
+            $ref: "#/components/schemas/AISpeakerView"
+        worth_reviewing:
+          type: array
+          items:
+            $ref: "#/components/schemas/AIWorthReviewing"
+        note_connections:
+          type: array
+          items:
+            $ref: "#/components/schemas/AINoteConnection"
+    AIArtifact:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - episode_id
+        - transcript_version_id
+        - artifact_type
+        - model
+        - prompt_version
+        - status
+        - input_tokens
+        - output_tokens
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+        episode_id:
+          type: string
+        transcript_version_id:
+          type: string
+        job_id:
+          type: string
+        artifact_type:
+          $ref: "#/components/schemas/AIArtifactType"
+        model:
+          type: string
+        prompt_version:
+          type: string
+        status:
+          $ref: "#/components/schemas/AIArtifactStatus"
+        result:
+          $ref: "#/components/schemas/AIArtifactResult"
+        error_code:
+          type: string
+        error_message:
+          type: string
+        input_tokens:
+          type: integer
+          minimum: 0
+        output_tokens:
+          type: integer
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+    AIArtifactList:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AIArtifact"
+    ConversationScope:
+      type: string
+      enum:
+        - episode
+        - library
+    CreateConversationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - scope
+        - episode_id
+      properties:
+        scope:
+          $ref: "#/components/schemas/ConversationScope"
+        episode_id:
+          type: string
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+    CreateConversationMessageRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - client_message_id
+        - content
+      properties:
+        client_message_id:
+          type: string
+        content:
+          type: string
+          minLength: 2
+          maxLength: 2000
+    AIMessageStatus:
+      type: string
+      enum:
+        - streaming
+        - completed
+        - failed
+    AIMessageRole:
+      type: string
+      enum:
+        - user
+        - assistant
+    AICitation:
+      type: object
+      additionalProperties: false
+      required:
+        - source_type
+        - source_id
+        - excerpt
+      properties:
+        source_type:
+          type: string
+          enum:
+            - transcript
+            - note
+        source_id:
+          type: string
+        excerpt:
+          type: string
+        speaker_id:
+          type: string
+        speaker_name:
+          type: string
+        start_ms:
+          type: integer
+          format: int64
+          minimum: 0
+        end_ms:
+          type: integer
+          format: int64
+          minimum: 1
+    ConversationMessage:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - role
+        - status
+        - content
+        - citations
+        - input_tokens
+        - output_tokens
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+        reply_to_message_id:
+          type: string
+        client_message_id:
+          type: string
+        role:
+          $ref: "#/components/schemas/AIMessageRole"
+        status:
+          $ref: "#/components/schemas/AIMessageStatus"
+        content:
+          type: string
+        model:
+          type: string
+        error_code:
+          type: string
+        error_message:
+          type: string
+        citations:
+          type: array
+          items:
+            $ref: "#/components/schemas/AICitation"
+        input_tokens:
+          type: integer
+          minimum: 0
+        output_tokens:
+          type: integer
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+    Conversation:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - scope
+        - title
+        - episode_title
+        - messages
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+        episode_id:
+          type: string
+        scope:
+          $ref: "#/components/schemas/ConversationScope"
+        title:
+          type: string
+        episode_title:
+          type: string
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConversationMessage"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
     TranscriptionProfile:
       type: string
       enum:

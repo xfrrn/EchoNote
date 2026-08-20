@@ -30,7 +30,7 @@ SELECT *
 FROM search_documents
 WHERE user_id = sqlc.arg(user_id)
   AND episode_id = sqlc.arg(episode_id)
-  AND document_type IN ('note', 'transcript')
+  AND document_type IN ('note', 'transcript', 'ai_artifact')
 ORDER BY document_type, source_id;
 
 -- name: CreateSearchDocument :one

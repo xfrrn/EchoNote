@@ -400,7 +400,7 @@ SELECT id, user_id, episode_id, document_type, source_id, content, content_hash,
 FROM search_documents
 WHERE user_id = $1
   AND episode_id = $2
-  AND document_type IN ('note', 'transcript')
+  AND document_type IN ('note', 'transcript', 'ai_artifact')
 ORDER BY document_type, source_id
 `
 

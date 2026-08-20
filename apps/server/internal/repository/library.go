@@ -61,8 +61,14 @@ func (r *LibraryRepository) Get(ctx context.Context, userID, episodeID pgtype.UU
 
 func (r *LibraryRepository) Delete(ctx context.Context, userID, episodeID pgtype.UUID) error {
 	_, err := withTx(ctx, r.pool, func(queries *db.Queries) (struct{}, error) {
+		if _, err := queries.LockOwnedEpisodeForAI(ctx, db.LockOwnedEpisodeForAIParams{EpisodeID: episodeID, UserID: userID}); err != nil {
+			return struct{}{}, err
+		}
 		objectKeys, err := queries.ListEpisodeTranscriptionObjectKeys(ctx, db.ListEpisodeTranscriptionObjectKeysParams{EpisodeID: episodeID, UserID: userID})
 		if err != nil {
+			return struct{}{}, err
+		}
+		if err := cancelAIJobsExcept(ctx, queries, userID, episodeID, pgtype.UUID{}); err != nil {
 			return struct{}{}, err
 		}
 		searchJobs, err := queries.CancelEpisodeSearchJobs(ctx, db.CancelEpisodeSearchJobsParams{UserID: userID, EpisodeID: episodeID})

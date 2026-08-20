@@ -59,6 +59,9 @@ func (r *NotesRepository) CreateForEpisode(
 		if err != nil {
 			return CaptureResult{}, fmt.Errorf("create note: %w", err)
 		}
+		if err := markEpisodeAIStale(ctx, queries, userID, episodeID); err != nil {
+			return CaptureResult{}, err
+		}
 		if err := enqueueSearchBuild(ctx, queries, userID, episodeID); err != nil {
 			return CaptureResult{}, err
 		}
@@ -124,6 +127,9 @@ func (r *NotesRepository) CaptureURL(
 		if err != nil {
 			return CaptureResult{}, fmt.Errorf("create capture note: %w", err)
 		}
+		if err := markEpisodeAIStale(ctx, queries, userID, episode.ID); err != nil {
+			return CaptureResult{}, err
+		}
 		if err := enqueueSearchBuild(ctx, queries, userID, episode.ID); err != nil {
 			return CaptureResult{}, err
 		}
@@ -149,8 +155,18 @@ func (r *NotesRepository) Update(ctx context.Context, userID, noteID pgtype.UUID
 		return db.Note{}, errors.New("user, note ID, and content are required")
 	}
 	note, err := withTx(ctx, r.pool, func(queries *db.Queries) (db.Note, error) {
+		episodeID, err := queries.GetOwnedNoteEpisodeForAI(ctx, db.GetOwnedNoteEpisodeForAIParams{NoteID: noteID, UserID: userID})
+		if err != nil {
+			return db.Note{}, err
+		}
+		if _, err := queries.LockOwnedEpisodeForNote(ctx, db.LockOwnedEpisodeForNoteParams{EpisodeID: episodeID, UserID: userID}); err != nil {
+			return db.Note{}, err
+		}
 		note, err := queries.UpdateNote(ctx, db.UpdateNoteParams{Content: content, NoteID: noteID, UserID: userID})
 		if err != nil {
+			return db.Note{}, err
+		}
+		if err := markEpisodeAIStale(ctx, queries, userID, note.EpisodeID); err != nil {
 			return db.Note{}, err
 		}
 		if err := enqueueSearchBuild(ctx, queries, userID, note.EpisodeID); err != nil {
@@ -169,8 +185,18 @@ func (r *NotesRepository) Delete(ctx context.Context, userID, noteID pgtype.UUID
 		return errors.New("user and note ID are required")
 	}
 	_, err := withTx(ctx, r.pool, func(queries *db.Queries) (db.Note, error) {
+		episodeID, err := queries.GetOwnedNoteEpisodeForAI(ctx, db.GetOwnedNoteEpisodeForAIParams{NoteID: noteID, UserID: userID})
+		if err != nil {
+			return db.Note{}, err
+		}
+		if _, err := queries.LockOwnedEpisodeForNote(ctx, db.LockOwnedEpisodeForNoteParams{EpisodeID: episodeID, UserID: userID}); err != nil {
+			return db.Note{}, err
+		}
 		note, err := queries.DeleteNote(ctx, db.DeleteNoteParams{NoteID: noteID, UserID: userID})
 		if err != nil {
+			return db.Note{}, err
+		}
+		if err := markEpisodeAIStale(ctx, queries, userID, note.EpisodeID); err != nil {
 			return db.Note{}, err
 		}
 		if err := enqueueSearchBuild(ctx, queries, userID, note.EpisodeID); err != nil {

@@ -13,6 +13,123 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
+// Defines values for AIArtifactStatus.
+const (
+	AIArtifactStatusFailed     AIArtifactStatus = "failed"
+	AIArtifactStatusGenerating AIArtifactStatus = "generating"
+	AIArtifactStatusQueued     AIArtifactStatus = "queued"
+	AIArtifactStatusReady      AIArtifactStatus = "ready"
+	AIArtifactStatusStale      AIArtifactStatus = "stale"
+)
+
+// Valid indicates whether the value is a known member of the AIArtifactStatus enum.
+func (e AIArtifactStatus) Valid() bool {
+	switch e {
+	case AIArtifactStatusFailed:
+		return true
+	case AIArtifactStatusGenerating:
+		return true
+	case AIArtifactStatusQueued:
+		return true
+	case AIArtifactStatusReady:
+		return true
+	case AIArtifactStatusStale:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AIArtifactType.
+const (
+	AIArtifactTypeEpisodeSummary AIArtifactType = "episode_summary"
+)
+
+// Valid indicates whether the value is a known member of the AIArtifactType enum.
+func (e AIArtifactType) Valid() bool {
+	switch e {
+	case AIArtifactTypeEpisodeSummary:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AICitationSourceType.
+const (
+	AICitationSourceTypeNote       AICitationSourceType = "note"
+	AICitationSourceTypeTranscript AICitationSourceType = "transcript"
+)
+
+// Valid indicates whether the value is a known member of the AICitationSourceType enum.
+func (e AICitationSourceType) Valid() bool {
+	switch e {
+	case AICitationSourceTypeNote:
+		return true
+	case AICitationSourceTypeTranscript:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AIMessageRole.
+const (
+	Assistant AIMessageRole = "assistant"
+	User      AIMessageRole = "user"
+)
+
+// Valid indicates whether the value is a known member of the AIMessageRole enum.
+func (e AIMessageRole) Valid() bool {
+	switch e {
+	case Assistant:
+		return true
+	case User:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AIMessageStatus.
+const (
+	AIMessageStatusCompleted AIMessageStatus = "completed"
+	AIMessageStatusFailed    AIMessageStatus = "failed"
+	AIMessageStatusStreaming AIMessageStatus = "streaming"
+)
+
+// Valid indicates whether the value is a known member of the AIMessageStatus enum.
+func (e AIMessageStatus) Valid() bool {
+	switch e {
+	case AIMessageStatusCompleted:
+		return true
+	case AIMessageStatusFailed:
+		return true
+	case AIMessageStatusStreaming:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConversationScope.
+const (
+	ConversationScopeEpisode ConversationScope = "episode"
+	ConversationScopeLibrary ConversationScope = "library"
+)
+
+// Valid indicates whether the value is a known member of the ConversationScope enum.
+func (e ConversationScope) Valid() bool {
+	switch e {
+	case ConversationScopeEpisode:
+		return true
+	case ConversationScopeLibrary:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ImportResponseStatus.
 const (
 	ImportResponseStatusCanceled  ImportResponseStatus = "canceled"
@@ -165,16 +282,16 @@ func (e SearchMode) Valid() bool {
 
 // Defines values for SearchScope.
 const (
-	Episode SearchScope = "episode"
-	Library SearchScope = "library"
+	SearchScopeEpisode SearchScope = "episode"
+	SearchScopeLibrary SearchScope = "library"
 )
 
 // Valid indicates whether the value is a known member of the SearchScope enum.
 func (e SearchScope) Valid() bool {
 	switch e {
-	case Episode:
+	case SearchScopeEpisode:
 		return true
-	case Library:
+	case SearchScopeLibrary:
 		return true
 	default:
 		return false
@@ -274,11 +391,130 @@ func (e TranscriptionRunStatus) Valid() bool {
 	}
 }
 
+// AIArtifact defines model for AIArtifact.
+type AIArtifact struct {
+	ArtifactType        AIArtifactType    `json:"artifact_type"`
+	CompletedAt         *time.Time        `json:"completed_at,omitempty"`
+	CreatedAt           time.Time         `json:"created_at"`
+	EpisodeId           string            `json:"episode_id"`
+	ErrorCode           *string           `json:"error_code,omitempty"`
+	ErrorMessage        *string           `json:"error_message,omitempty"`
+	Id                  string            `json:"id"`
+	InputTokens         int               `json:"input_tokens"`
+	JobId               *string           `json:"job_id,omitempty"`
+	Model               string            `json:"model"`
+	OutputTokens        int               `json:"output_tokens"`
+	PromptVersion       string            `json:"prompt_version"`
+	Result              *AIArtifactResult `json:"result,omitempty"`
+	Status              AIArtifactStatus  `json:"status"`
+	TranscriptVersionId string            `json:"transcript_version_id"`
+	UpdatedAt           time.Time         `json:"updated_at"`
+}
+
+// AIArtifactList defines model for AIArtifactList.
+type AIArtifactList struct {
+	Items []AIArtifact `json:"items"`
+}
+
+// AIArtifactResult defines model for AIArtifactResult.
+type AIArtifactResult struct {
+	KeyPoints          []string           `json:"key_points"`
+	NoteConnections    []AINoteConnection `json:"note_connections"`
+	OneSentenceSummary string             `json:"one_sentence_summary"`
+	SpeakerViews       []AISpeakerView    `json:"speaker_views"`
+	WorthReviewing     []AIWorthReviewing `json:"worth_reviewing"`
+}
+
+// AIArtifactStatus defines model for AIArtifactStatus.
+type AIArtifactStatus string
+
+// AIArtifactType defines model for AIArtifactType.
+type AIArtifactType string
+
+// AICitation defines model for AICitation.
+type AICitation struct {
+	EndMs       *int64               `json:"end_ms,omitempty"`
+	Excerpt     string               `json:"excerpt"`
+	SourceId    string               `json:"source_id"`
+	SourceType  AICitationSourceType `json:"source_type"`
+	SpeakerId   *string              `json:"speaker_id,omitempty"`
+	SpeakerName *string              `json:"speaker_name,omitempty"`
+	StartMs     *int64               `json:"start_ms,omitempty"`
+}
+
+// AICitationSourceType defines model for AICitation.SourceType.
+type AICitationSourceType string
+
+// AIMessageRole defines model for AIMessageRole.
+type AIMessageRole string
+
+// AIMessageStatus defines model for AIMessageStatus.
+type AIMessageStatus string
+
+// AINoteConnection defines model for AINoteConnection.
+type AINoteConnection struct {
+	Insight string `json:"insight"`
+	Note    string `json:"note"`
+	NoteId  string `json:"note_id"`
+}
+
+// AISpeakerView defines model for AISpeakerView.
+type AISpeakerView struct {
+	Points      []string `json:"points"`
+	SpeakerId   string   `json:"speaker_id"`
+	SpeakerName string   `json:"speaker_name"`
+}
+
+// AIWorthReviewing defines model for AIWorthReviewing.
+type AIWorthReviewing struct {
+	EndMs               int64  `json:"end_ms"`
+	Quote               string `json:"quote"`
+	Reason              string `json:"reason"`
+	SpeakerId           string `json:"speaker_id"`
+	SpeakerName         string `json:"speaker_name"`
+	StartMs             int64  `json:"start_ms"`
+	TranscriptSegmentId string `json:"transcript_segment_id"`
+}
+
 // CaptureResponse defines model for CaptureResponse.
 type CaptureResponse struct {
 	ImportId *string `json:"import_id,omitempty"`
 	Note     Note    `json:"note"`
 }
+
+// Conversation defines model for Conversation.
+type Conversation struct {
+	CreatedAt    time.Time             `json:"created_at"`
+	EpisodeId    *string               `json:"episode_id,omitempty"`
+	EpisodeTitle string                `json:"episode_title"`
+	Id           string                `json:"id"`
+	Messages     []ConversationMessage `json:"messages"`
+	Scope        ConversationScope     `json:"scope"`
+	Title        string                `json:"title"`
+	UpdatedAt    time.Time             `json:"updated_at"`
+}
+
+// ConversationMessage defines model for ConversationMessage.
+type ConversationMessage struct {
+	Citations        []AICitation    `json:"citations"`
+	ClientMessageId  *string         `json:"client_message_id,omitempty"`
+	CompletedAt      *time.Time      `json:"completed_at,omitempty"`
+	Content          string          `json:"content"`
+	CreatedAt        time.Time       `json:"created_at"`
+	ErrorCode        *string         `json:"error_code,omitempty"`
+	ErrorMessage     *string         `json:"error_message,omitempty"`
+	Id               string          `json:"id"`
+	InputTokens      int             `json:"input_tokens"`
+	Model            *string         `json:"model,omitempty"`
+	OutputTokens     int             `json:"output_tokens"`
+	ReplyToMessageId *string         `json:"reply_to_message_id,omitempty"`
+	Role             AIMessageRole   `json:"role"`
+	Status           AIMessageStatus `json:"status"`
+	UpdatedAt        time.Time       `json:"updated_at"`
+}
+
+// ConversationScope defines model for ConversationScope.
+type ConversationScope string
 
 // CreateCaptureRequest Exactly one of episode_id and episode_url must be supplied.
 type CreateCaptureRequest struct {
@@ -287,6 +523,19 @@ type CreateCaptureRequest struct {
 	CreatedAt    time.Time `json:"created_at"`
 	EpisodeId    *string   `json:"episode_id,omitempty"`
 	EpisodeUrl   *string   `json:"episode_url,omitempty"`
+}
+
+// CreateConversationMessageRequest defines model for CreateConversationMessageRequest.
+type CreateConversationMessageRequest struct {
+	ClientMessageId string `json:"client_message_id"`
+	Content         string `json:"content"`
+}
+
+// CreateConversationRequest defines model for CreateConversationRequest.
+type CreateConversationRequest struct {
+	EpisodeId string            `json:"episode_id"`
+	Scope     ConversationScope `json:"scope"`
+	Title     *string           `json:"title,omitempty"`
 }
 
 // CreateImportRequest defines model for CreateImportRequest.
@@ -637,6 +886,12 @@ type ListTranscriptSegmentsParams struct {
 // CreateCaptureJSONRequestBody defines body for CreateCapture for application/json ContentType.
 type CreateCaptureJSONRequestBody = CreateCaptureRequest
 
+// CreateConversationJSONRequestBody defines body for CreateConversation for application/json ContentType.
+type CreateConversationJSONRequestBody = CreateConversationRequest
+
+// StreamConversationMessageJSONRequestBody defines body for StreamConversationMessage for application/json ContentType.
+type StreamConversationMessageJSONRequestBody = CreateConversationMessageRequest
+
 // CreateEpisodeNoteJSONRequestBody defines body for CreateEpisodeNote for application/json ContentType.
 type CreateEpisodeNoteJSONRequestBody = CreateNoteRequest
 
@@ -663,6 +918,15 @@ type ServerInterface interface {
 	// CreateCapture Capture a note for an Episode or URL
 	// (POST /api/v1/captures)
 	CreateCapture(w http.ResponseWriter, r *http.Request)
+	// CreateConversation Create an Episode-scoped AI Conversation
+	// (POST /api/v1/conversations)
+	CreateConversation(w http.ResponseWriter, r *http.Request)
+	// GetConversation Get a Conversation with durable Messages and Citations
+	// (GET /api/v1/conversations/{conversationId})
+	GetConversation(w http.ResponseWriter, r *http.Request, conversationId string)
+	// StreamConversationMessage Ask an Episode question and stream a citation-validated answer
+	// (POST /api/v1/conversations/{conversationId}/messages)
+	StreamConversationMessage(w http.ResponseWriter, r *http.Request, conversationId string)
 	// ListEpisodes List recently imported episodes
 	// (GET /api/v1/episodes)
 	ListEpisodes(w http.ResponseWriter, r *http.Request, params ListEpisodesParams)
@@ -672,6 +936,12 @@ type ServerInterface interface {
 	// GetEpisode Get an Episode with Podcast and Sources
 	// (GET /api/v1/episodes/{episodeId})
 	GetEpisode(w http.ResponseWriter, r *http.Request, episodeId string)
+	// ListEpisodeAIArtifacts List cached and historical AI Artifacts for an Episode
+	// (GET /api/v1/episodes/{episodeId}/ai/artifacts)
+	ListEpisodeAIArtifacts(w http.ResponseWriter, r *http.Request, episodeId string)
+	// RequestEpisodeAIArtifact Return a cached Episode summary or enqueue on-demand generation
+	// (POST /api/v1/episodes/{episodeId}/ai/artifacts)
+	RequestEpisodeAIArtifact(w http.ResponseWriter, r *http.Request, episodeId string)
 	// ListEpisodeNotes List active Notes for an Episode
 	// (GET /api/v1/episodes/{episodeId}/notes)
 	ListEpisodeNotes(w http.ResponseWriter, r *http.Request, episodeId string)
@@ -741,6 +1011,24 @@ func (_ Unimplemented) CreateCapture(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// CreateConversation Create an Episode-scoped AI Conversation
+// (POST /api/v1/conversations)
+func (_ Unimplemented) CreateConversation(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetConversation Get a Conversation with durable Messages and Citations
+// (GET /api/v1/conversations/{conversationId})
+func (_ Unimplemented) GetConversation(w http.ResponseWriter, r *http.Request, conversationId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// StreamConversationMessage Ask an Episode question and stream a citation-validated answer
+// (POST /api/v1/conversations/{conversationId}/messages)
+func (_ Unimplemented) StreamConversationMessage(w http.ResponseWriter, r *http.Request, conversationId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // ListEpisodes List recently imported episodes
 // (GET /api/v1/episodes)
 func (_ Unimplemented) ListEpisodes(w http.ResponseWriter, r *http.Request, params ListEpisodesParams) {
@@ -756,6 +1044,18 @@ func (_ Unimplemented) DeleteEpisode(w http.ResponseWriter, r *http.Request, epi
 // GetEpisode Get an Episode with Podcast and Sources
 // (GET /api/v1/episodes/{episodeId})
 func (_ Unimplemented) GetEpisode(w http.ResponseWriter, r *http.Request, episodeId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListEpisodeAIArtifacts List cached and historical AI Artifacts for an Episode
+// (GET /api/v1/episodes/{episodeId}/ai/artifacts)
+func (_ Unimplemented) ListEpisodeAIArtifacts(w http.ResponseWriter, r *http.Request, episodeId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// RequestEpisodeAIArtifact Return a cached Episode summary or enqueue on-demand generation
+// (POST /api/v1/episodes/{episodeId}/ai/artifacts)
+func (_ Unimplemented) RequestEpisodeAIArtifact(w http.ResponseWriter, r *http.Request, episodeId string) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -896,6 +1196,72 @@ func (siw *ServerInterfaceWrapper) CreateCapture(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// CreateConversation operation middleware
+func (siw *ServerInterfaceWrapper) CreateConversation(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateConversation(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetConversation operation middleware
+func (siw *ServerInterfaceWrapper) GetConversation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "conversationId" -------------
+	var conversationId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "conversationId", chi.URLParam(r, "conversationId"), &conversationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "conversationId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetConversation(w, r, conversationId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// StreamConversationMessage operation middleware
+func (siw *ServerInterfaceWrapper) StreamConversationMessage(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "conversationId" -------------
+	var conversationId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "conversationId", chi.URLParam(r, "conversationId"), &conversationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "conversationId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StreamConversationMessage(w, r, conversationId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListEpisodes operation middleware
 func (siw *ServerInterfaceWrapper) ListEpisodes(w http.ResponseWriter, r *http.Request) {
 
@@ -985,6 +1351,58 @@ func (siw *ServerInterfaceWrapper) GetEpisode(w http.ResponseWriter, r *http.Req
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetEpisode(w, r, episodeId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListEpisodeAIArtifacts operation middleware
+func (siw *ServerInterfaceWrapper) ListEpisodeAIArtifacts(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "episodeId" -------------
+	var episodeId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "episodeId", chi.URLParam(r, "episodeId"), &episodeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "episodeId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListEpisodeAIArtifacts(w, r, episodeId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RequestEpisodeAIArtifact operation middleware
+func (siw *ServerInterfaceWrapper) RequestEpisodeAIArtifact(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "episodeId" -------------
+	var episodeId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "episodeId", chi.URLParam(r, "episodeId"), &episodeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "episodeId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RequestEpisodeAIArtifact(w, r, episodeId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1702,6 +2120,21 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/search/reindex", wrapper.ReindexSearch)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/episodes/{episodeId}/ai/artifacts", wrapper.ListEpisodeAIArtifacts)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/episodes/{episodeId}/ai/artifacts", wrapper.RequestEpisodeAIArtifact)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/conversations", wrapper.CreateConversation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/conversations/{conversationId}", wrapper.GetConversation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/conversations/{conversationId}/messages", wrapper.StreamConversationMessage)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/episodes/{episodeId}/transcriptions", wrapper.CreateTranscription)

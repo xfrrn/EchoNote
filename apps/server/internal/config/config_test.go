@@ -32,6 +32,9 @@ func TestLoad(t *testing.T) {
 	if cfg.EmbeddingEndpoint != "https://dashscope.aliyuncs.com" {
 		t.Fatalf("unexpected embedding endpoint: %q", cfg.EmbeddingEndpoint)
 	}
+	if cfg.LLMEndpoint != "https://dashscope.aliyuncs.com/compatible-mode/v1" || cfg.LLMModel != "qwen-plus" {
+		t.Fatalf("unexpected LLM defaults: endpoint=%q model=%q", cfg.LLMEndpoint, cfg.LLMModel)
+	}
 	if !cfg.UserID.Valid {
 		t.Fatal("expected ECHONOTE_USER_ID to be parsed")
 	}
@@ -47,6 +50,19 @@ func TestValidateEmbedding(t *testing.T) {
 	}
 	if err := cfg.ValidateEmbedding(); err != nil || !cfg.EmbeddingEnabled() {
 		t.Fatalf("enabled=%v err=%v", cfg.EmbeddingEnabled(), err)
+	}
+}
+
+func TestValidateLLM(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://localhost/echonote")
+	t.Setenv("LLM_PROVIDER", "aliyun")
+	t.Setenv("LLM_API_KEY", "test-key")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.ValidateLLM(); err != nil || !cfg.LLMEnabled() {
+		t.Fatalf("enabled=%v err=%v", cfg.LLMEnabled(), err)
 	}
 }
 
@@ -105,5 +121,14 @@ func TestLoadRejectsInsecureEmbeddingEndpoint(t *testing.T) {
 	t.Setenv("EMBEDDING_ENDPOINT", "http://key@example.com/api/v1")
 	if _, err := Load(); err == nil {
 		t.Fatal("expected insecure EMBEDDING_ENDPOINT to fail")
+	}
+}
+
+func TestLoadRejectsInsecureLLMEndpoint(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://localhost/echonote")
+	t.Setenv("LLM_PROVIDER", "aliyun")
+	t.Setenv("LLM_ENDPOINT", "http://key@example.com/api/v1")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected insecure LLM_ENDPOINT to fail")
 	}
 }

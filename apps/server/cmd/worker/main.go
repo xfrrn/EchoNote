@@ -12,11 +12,13 @@ import (
 
 	"github.com/Actify/echonote/apps/server/internal/config"
 	"github.com/Actify/echonote/apps/server/internal/database"
+	aidomain "github.com/Actify/echonote/apps/server/internal/domain/ai"
 	searchdomain "github.com/Actify/echonote/apps/server/internal/domain/search"
 	"github.com/Actify/echonote/apps/server/internal/logging"
 	"github.com/Actify/echonote/apps/server/internal/provider/asr"
 	"github.com/Actify/echonote/apps/server/internal/provider/audio"
 	"github.com/Actify/echonote/apps/server/internal/provider/embedding"
+	llmprovider "github.com/Actify/echonote/apps/server/internal/provider/llm"
 	podcastprovider "github.com/Actify/echonote/apps/server/internal/provider/podcast"
 	"github.com/Actify/echonote/apps/server/internal/provider/storage"
 	"github.com/Actify/echonote/apps/server/internal/repository"
@@ -68,6 +70,18 @@ func run() error {
 		logger.Warn("semantic indexing disabled", "reason", cfg.ValidateEmbedding())
 	}
 	for jobType, handler := range service.NewSearchWorkflow(repository.NewSearchRepository(pool), embeddingProvider).Handlers() {
+		handlers[jobType] = handler
+	}
+	var llmProvider aidomain.LLMProvider
+	if cfg.LLMEnabled() {
+		llmProvider, err = llmprovider.NewAliyun(cfg.LLMEndpoint, cfg.LLMModel, cfg.LLMAPIKey, nil)
+		if err != nil {
+			return fmt.Errorf("configure LLM: %w", err)
+		}
+	} else {
+		logger.Warn("AI generation disabled", "reason", cfg.ValidateLLM())
+	}
+	for jobType, handler := range service.NewAIWorkflow(repository.NewAIRepository(pool), llmProvider).Handlers() {
 		handlers[jobType] = handler
 	}
 	if cfg.TranscriptionEnabled() {

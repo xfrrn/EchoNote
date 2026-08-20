@@ -7,6 +7,7 @@ sql:
       - migrations/000003_notes.up.sql
       - migrations/000004_transcription.up.sql
       - migrations/000005_search.up.sql
+      - migrations/000006_ai.up.sql
     queries: internal/database/queries
     gen:
       go:
