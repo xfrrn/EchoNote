@@ -1,0 +1,6 @@
+BEGIN;
+
+DROP TABLE IF EXISTS job_events;
+DROP TABLE IF EXISTS jobs;
+
+COMMIT;

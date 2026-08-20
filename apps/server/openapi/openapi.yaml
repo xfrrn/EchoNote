@@ -1,0 +1,77 @@
+openapi: 3.0.3
+info:
+  title: EchoNote API
+  version: 0.1.0
+  description: EchoNote modular-monolith HTTP API.
+paths:
+  /healthz:
+    get:
+      operationId: getLiveness
+      summary: Process liveness
+      responses:
+        "200":
+          description: The API process is running.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+  /readyz:
+    get:
+      operationId: getReadiness
+      summary: Dependency readiness
+      responses:
+        "200":
+          description: The API and PostgreSQL are ready.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessResponse"
+        "503":
+          description: PostgreSQL is unavailable.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessResponse"
+components:
+  headers:
+    RequestID:
+      description: Request correlation identifier.
+      schema:
+        type: string
+  schemas:
+    StatusResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+    ReadinessResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - database
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+            - unavailable
+        database:
+          type: string
+          enum:
+            - up
+            - down
