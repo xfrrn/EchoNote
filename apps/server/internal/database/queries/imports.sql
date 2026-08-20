@@ -27,11 +27,12 @@ WHERE import_record.id = sqlc.arg(import_id)
   AND import_record.user_id = sqlc.arg(user_id);
 
 -- name: GetImportForResolve :one
-SELECT *
-FROM imports
-WHERE id = sqlc.arg(import_id)
-  AND user_id = sqlc.arg(user_id)
-FOR UPDATE;
+SELECT import_record.*, job.status AS job_status
+FROM imports AS import_record
+JOIN jobs AS job ON job.id = import_record.job_id
+WHERE import_record.id = sqlc.arg(import_id)
+  AND import_record.user_id = sqlc.arg(user_id)
+FOR UPDATE OF import_record;
 
 -- name: UpsertPodcast :one
 INSERT INTO podcasts (
@@ -141,7 +142,7 @@ INSERT INTO episode_sources (
 )
 ON CONFLICT (user_id, episode_id, source_type, source_url) DO NOTHING;
 
--- name: CompleteImport :exec
+-- name: SetImportEpisode :exec
 UPDATE imports
 SET episode_id = sqlc.arg(episode_id),
     updated_at = now()

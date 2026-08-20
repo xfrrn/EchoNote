@@ -30,6 +30,7 @@ type Server struct {
 	database Pinger
 	imports  *repository.ImportRepository
 	library  *repository.LibraryRepository
+	notes    *repository.NotesRepository
 	userID   pgtype.UUID
 	logger   *slog.Logger
 }
@@ -40,6 +41,7 @@ func NewRouter(
 	database Pinger,
 	imports *repository.ImportRepository,
 	library *repository.LibraryRepository,
+	notes *repository.NotesRepository,
 	userID pgtype.UUID,
 	logger *slog.Logger,
 ) http.Handler {
@@ -47,7 +49,165 @@ func NewRouter(
 	router.Use(middleware.RequestID)
 	router.Use(requestLogger(logger, formatUUID(userID)))
 	router.Use(recoverer(logger))
-	return HandlerFromMux(&Server{database: database, imports: imports, library: library, userID: userID, logger: logger}, router)
+	return HandlerFromMux(&Server{database: database, imports: imports, library: library, notes: notes, userID: userID, logger: logger}, router)
+}
+
+func (s *Server) CreateCapture(w http.ResponseWriter, r *http.Request) {
+	var request CreateCaptureRequest
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeAPIError(w, http.StatusBadRequest, "INVALID_REQUEST", "request body must contain one capture")
+		return
+	}
+	clientNoteID, content, err := parseNoteInput(request.ClientNoteId, request.Content, request.CreatedAt)
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, "INVALID_NOTE", "client_note_id, content, and created_at are required")
+		return
+	}
+	episodeID := valueOrEmpty(request.EpisodeId)
+	episodeURL := valueOrEmpty(request.EpisodeUrl)
+	if (episodeID == "") == (episodeURL == "") {
+		writeAPIError(w, http.StatusBadRequest, "INVALID_CAPTURE_TARGET", "provide exactly one of episode_id and episode_url")
+		return
+	}
+
+	var result repository.CaptureResult
+	if episodeID != "" {
+		parsedEpisodeID, parseErr := parseUUID(episodeID)
+		if parseErr != nil {
+			writeAPIError(w, http.StatusBadRequest, "INVALID_EPISODE_ID", "episode_id must be a UUID")
+			return
+		}
+		result, err = s.notes.CreateForEpisode(r.Context(), s.userID, parsedEpisodeID, clientNoteID, content, request.CreatedAt)
+	} else {
+		episodeURL, err = parseHTTPURL(episodeURL)
+		if err != nil {
+			writeAPIError(w, http.StatusBadRequest, "INVALID_URL", "episode_url must be an HTTP or HTTPS URL")
+			return
+		}
+		result, err = s.notes.CaptureURL(r.Context(), s.userID, clientNoteID, episodeURL, content, request.CreatedAt)
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeAPIError(w, http.StatusNotFound, "EPISODE_NOT_FOUND", "episode was not found")
+		return
+	}
+	if err != nil {
+		s.logger.ErrorContext(r.Context(), "create capture", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(s.userID), "error", err)
+		writeAPIError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
+		return
+	}
+	response := CaptureResponse{Note: noteResponse(result.Note)}
+	if result.ImportID.Valid {
+		importID := formatUUID(result.ImportID)
+		response.ImportId = &importID
+	}
+	status := http.StatusOK
+	if result.Created {
+		status = http.StatusCreated
+	}
+	writeJSON(w, status, response)
+}
+
+func (s *Server) ListEpisodeNotes(w http.ResponseWriter, r *http.Request, episodeID string) {
+	parsedEpisodeID, err := parseUUID(episodeID)
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, "INVALID_EPISODE_ID", "episodeId must be a UUID")
+		return
+	}
+	rows, err := s.notes.List(r.Context(), s.userID, parsedEpisodeID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeAPIError(w, http.StatusNotFound, "EPISODE_NOT_FOUND", "episode was not found")
+		return
+	}
+	if err != nil {
+		s.logger.ErrorContext(r.Context(), "list notes", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(s.userID), "episode_id", episodeID, "error", err)
+		writeAPIError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
+		return
+	}
+	items := make([]Note, len(rows))
+	for index, row := range rows {
+		items[index] = noteResponse(row)
+	}
+	writeJSON(w, http.StatusOK, NoteListResponse{Items: items})
+}
+
+func (s *Server) CreateEpisodeNote(w http.ResponseWriter, r *http.Request, episodeID string) {
+	parsedEpisodeID, err := parseUUID(episodeID)
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, "INVALID_EPISODE_ID", "episodeId must be a UUID")
+		return
+	}
+	var request CreateNoteRequest
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeAPIError(w, http.StatusBadRequest, "INVALID_REQUEST", "request body must contain one note")
+		return
+	}
+	clientNoteID, content, err := parseNoteInput(request.ClientNoteId, request.Content, request.CreatedAt)
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, "INVALID_NOTE", "client_note_id, content, and created_at are required")
+		return
+	}
+	result, err := s.notes.CreateForEpisode(r.Context(), s.userID, parsedEpisodeID, clientNoteID, content, request.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeAPIError(w, http.StatusNotFound, "EPISODE_NOT_FOUND", "episode was not found")
+		return
+	}
+	if err != nil {
+		s.logger.ErrorContext(r.Context(), "create note", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(s.userID), "episode_id", episodeID, "error", err)
+		writeAPIError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
+		return
+	}
+	status := http.StatusOK
+	if result.Created {
+		status = http.StatusCreated
+	}
+	writeJSON(w, status, noteResponse(result.Note))
+}
+
+func (s *Server) UpdateNote(w http.ResponseWriter, r *http.Request, noteID string) {
+	parsedNoteID, err := parseUUID(noteID)
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, "INVALID_NOTE_ID", "noteId must be a UUID")
+		return
+	}
+	var request UpdateNoteRequest
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeAPIError(w, http.StatusBadRequest, "INVALID_REQUEST", "request body must contain note content")
+		return
+	}
+	request.Content = strings.TrimSpace(request.Content)
+	if request.Content == "" {
+		writeAPIError(w, http.StatusBadRequest, "INVALID_NOTE", "content is required")
+		return
+	}
+	note, err := s.notes.Update(r.Context(), s.userID, parsedNoteID, request.Content)
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeAPIError(w, http.StatusNotFound, "NOTE_NOT_FOUND", "note was not found")
+		return
+	}
+	if err != nil {
+		s.logger.ErrorContext(r.Context(), "update note", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(s.userID), "note_id", noteID, "error", err)
+		writeAPIError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
+		return
+	}
+	writeJSON(w, http.StatusOK, noteResponse(note))
+}
+
+func (s *Server) DeleteNote(w http.ResponseWriter, r *http.Request, noteID string) {
+	parsedNoteID, err := parseUUID(noteID)
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, "INVALID_NOTE_ID", "noteId must be a UUID")
+		return
+	}
+	if err := s.notes.Delete(r.Context(), s.userID, parsedNoteID); errors.Is(err, pgx.ErrNoRows) {
+		writeAPIError(w, http.StatusNotFound, "NOTE_NOT_FOUND", "note was not found")
+		return
+	} else if err != nil {
+		s.logger.ErrorContext(r.Context(), "delete note", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(s.userID), "note_id", noteID, "error", err)
+		writeAPIError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
+		return
+	}
+	s.logger.InfoContext(r.Context(), "note deleted", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(s.userID), "note_id", noteID)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) ListEpisodes(w http.ResponseWriter, r *http.Request, params ListEpisodesParams) {
@@ -118,12 +278,12 @@ func (s *Server) CreateImport(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusBadRequest, "INVALID_REQUEST", "request body must contain one URL")
 		return
 	}
-	request.Url = strings.TrimSpace(request.Url)
-	parsed, err := url.ParseRequestURI(request.Url)
-	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" || parsed.User != nil || len(request.Url) > 4096 {
+	parsedURL, err := parseHTTPURL(request.Url)
+	if err != nil {
 		writeAPIError(w, http.StatusBadRequest, "INVALID_URL", "url must be an HTTP or HTTPS URL")
 		return
 	}
+	request.Url = parsedURL
 	status, err := s.imports.Create(r.Context(), s.userID, request.Url)
 	if err != nil {
 		s.logger.ErrorContext(r.Context(), "create import", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(s.userID), "error", err)
@@ -242,7 +402,7 @@ func episodeSummary(row db.ListLibraryEpisodesRow) EpisodeSummary {
 		),
 		Title: row.Title, DurationMs: row.DurationMs, CoverUrl: episodeCover(row.CoverUrl, row.PodcastCoverUrl),
 		ResolveStatus: ResolveStatus(row.ResolveStatus), TranscriptionStatus: ProcessingStatus(row.TranscriptionStatus),
-		AiStatus: ProcessingStatus(row.AiStatus), SourceCount: row.SourceCount,
+		AiStatus: ProcessingStatus(row.AiStatus), SourceCount: row.SourceCount, NoteCount: row.NoteCount,
 		CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time,
 	}
 	if row.PublishedAt.Valid {
@@ -303,6 +463,36 @@ func valueOrEmpty(value *string) string {
 		return ""
 	}
 	return *value
+}
+
+func noteResponse(row db.Note) Note {
+	response := Note{
+		Id: formatUUID(row.ID), EpisodeId: formatUUID(row.EpisodeID), ClientNoteId: formatUUID(row.ClientNoteID),
+		Content: row.Content, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time,
+	}
+	if row.DeletedAt.Valid {
+		deletedAt := row.DeletedAt.Time
+		response.DeletedAt = &deletedAt
+	}
+	return response
+}
+
+func parseNoteInput(clientNoteID, content string, createdAt time.Time) (pgtype.UUID, string, error) {
+	parsedClientNoteID, err := parseUUID(strings.TrimSpace(clientNoteID))
+	content = strings.TrimSpace(content)
+	if err != nil || content == "" || createdAt.IsZero() {
+		return pgtype.UUID{}, "", errors.New("invalid note input")
+	}
+	return parsedClientNoteID, content, nil
+}
+
+func parseHTTPURL(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	parsed, err := url.ParseRequestURI(value)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" || parsed.User != nil || len(value) > 4096 {
+		return "", errors.New("invalid HTTP URL")
+	}
+	return value, nil
 }
 
 func writeAPIError(w http.ResponseWriter, status int, code, message string) {

@@ -60,6 +60,15 @@ func (r *LibraryRepository) Get(ctx context.Context, userID, episodeID pgtype.UU
 
 func (r *LibraryRepository) Delete(ctx context.Context, userID, episodeID pgtype.UUID) error {
 	_, err := withTx(ctx, r.pool, func(queries *db.Queries) (struct{}, error) {
+		jobs, err := queries.CancelEpisodeImportJobs(ctx, db.CancelEpisodeImportJobsParams{EpisodeID: episodeID, UserID: userID})
+		if err != nil {
+			return struct{}{}, err
+		}
+		for _, job := range jobs {
+			if err := createEvent(ctx, queries, job, "canceled"); err != nil {
+				return struct{}{}, err
+			}
+		}
 		podcastID, err := queries.DeleteLibraryEpisode(ctx, db.DeleteLibraryEpisodeParams{EpisodeID: episodeID, UserID: userID})
 		if err != nil {
 			return struct{}{}, err

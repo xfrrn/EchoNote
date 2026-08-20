@@ -1,6 +1,6 @@
 # EchoNote 后端
 
-Go 模块化单体，当前完成 Phase 1 基础设施、Phase 2 Import 与 Phase 3 Library：异步 Episode 创建、跨来源去重、资料库查询与删除。
+Go 模块化单体，当前完成 Phase 1 基础设施、Phase 2 Import、Phase 3 Library 与 Phase 4 Notes：异步 Episode 创建、跨来源去重、资料库查询、Capture 和离线幂等笔记。
 
 ## 本地启动
 
@@ -61,6 +61,20 @@ DELETE /api/v1/episodes/{episode_id}       永久删除 Episode
 
 所有查询和删除都按 `ECHONOTE_USER_ID` 隔离。删除会级联清理 Source 与去重身份键，并在没有其他 Episode 时清理 Podcast；Import 与 Job 历史保留。
 
+Library 列表的 `note_count` 只统计未删除 Note。删除仍在解析的 Capture Episode 时，关联 Import Job 会被取消，避免 Worker 之后重新创建该 Episode。
+
+## Capture 与 Notes API
+
+```text
+POST   /api/v1/captures                    按 episode_id 或 episode_url 快速记录
+GET    /api/v1/episodes/{episode_id}/notes 查询未删除 Note
+POST   /api/v1/episodes/{episode_id}/notes 为已导入 Episode 新建 Note
+PATCH  /api/v1/notes/{note_id}             编辑 Note
+DELETE /api/v1/notes/{note_id}             幂等软删除 Note
+```
+
+PWA 必须为每条离线 Note 生成稳定 UUID `client_note_id`。首次创建返回 201；相同用户重复提交同一 ID 返回已保存 Note 和 200，不会重复写入。URL Capture 会原子创建 Pending Episode、Note 与 Import Job，并返回 `import_id` 供轮询。
+
 ## Migration 与代码生成
 
 ```bash
@@ -79,13 +93,13 @@ go test ./...
 go vet ./...
 ```
 
-PostgreSQL 集成测试默认跳过。显式提供隔离的测试数据库后会执行 Migration，并验证 Job 生命周期、跨来源去重、Library 分页、用户隔离与删除级联：
+PostgreSQL 集成测试默认跳过。显式提供隔离的测试数据库后会执行 Migration，并验证 Job 生命周期、跨来源去重、Library 分页、Notes HTTP 生命周期、并发离线幂等、用户隔离与删除级联：
 
 ```text
 ECHONOTE_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/echonote_test?sslmode=disable
 ```
 
-测试只清理自己创建的 Job。
+测试使用随机用户 ID，并只清理自己创建的业务数据与 Job。
 
 ## 当前目录
 
@@ -98,11 +112,11 @@ internal/database/       pgx 连接、migration 与 sqlc 生成代码
 internal/http/           Chi 路由、OpenAPI handler、中间件
 internal/domain/         Resolver 领域契约
 internal/provider/       Apple、RSS、直接音频 Provider 与安全 HTTP Client
-internal/repository/     Import 持久化、Episode 去重、PostgreSQL Job Queue
+internal/repository/     Import、Library、Notes 持久化与 PostgreSQL Job Queue
 internal/service/        Import Job 编排
 internal/worker/         Job 消费、续租、分类重试与崩溃隔离
 migrations/              版本化 SQL
 openapi/                 HTTP 契约
 ```
 
-实施记录见 `docs/architecture/phase-1-foundation.md`、`docs/architecture/phase-2-import.md` 与 `docs/architecture/phase-3-library.md`。
+实施记录见 `docs/architecture/phase-1-foundation.md`、`docs/architecture/phase-2-import.md`、`docs/architecture/phase-3-library.md` 与 `docs/architecture/phase-4-notes.md`。

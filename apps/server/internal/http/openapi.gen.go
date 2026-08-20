@@ -160,9 +160,31 @@ func (e StatusResponseStatus) Valid() bool {
 	}
 }
 
+// CaptureResponse defines model for CaptureResponse.
+type CaptureResponse struct {
+	ImportId *string `json:"import_id,omitempty"`
+	Note     Note    `json:"note"`
+}
+
+// CreateCaptureRequest Exactly one of episode_id and episode_url must be supplied.
+type CreateCaptureRequest struct {
+	ClientNoteId string    `json:"client_note_id"`
+	Content      string    `json:"content"`
+	CreatedAt    time.Time `json:"created_at"`
+	EpisodeId    *string   `json:"episode_id,omitempty"`
+	EpisodeUrl   *string   `json:"episode_url,omitempty"`
+}
+
 // CreateImportRequest defines model for CreateImportRequest.
 type CreateImportRequest struct {
 	Url string `json:"url"`
+}
+
+// CreateNoteRequest defines model for CreateNoteRequest.
+type CreateNoteRequest struct {
+	ClientNoteId string    `json:"client_note_id"`
+	Content      string    `json:"content"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 // EpisodeDetail defines model for EpisodeDetail.
@@ -209,6 +231,7 @@ type EpisodeSummary struct {
 	CreatedAt           time.Time        `json:"created_at"`
 	DurationMs          int64            `json:"duration_ms"`
 	Id                  string           `json:"id"`
+	NoteCount           int64            `json:"note_count"`
 	Podcast             *PodcastSummary  `json:"podcast,omitempty"`
 	PublishedAt         *time.Time       `json:"published_at,omitempty"`
 	ResolveStatus       ResolveStatus    `json:"resolve_status"`
@@ -244,6 +267,22 @@ type ImportResponse struct {
 
 // ImportResponseStatus defines model for ImportResponse.Status.
 type ImportResponseStatus string
+
+// Note defines model for Note.
+type Note struct {
+	ClientNoteId string     `json:"client_note_id"`
+	Content      string     `json:"content"`
+	CreatedAt    time.Time  `json:"created_at"`
+	DeletedAt    *time.Time `json:"deleted_at,omitempty"`
+	EpisodeId    string     `json:"episode_id"`
+	Id           string     `json:"id"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+}
+
+// NoteListResponse defines model for NoteListResponse.
+type NoteListResponse struct {
+	Items []Note `json:"items"`
+}
 
 // PodcastSummary defines model for PodcastSummary.
 type PodcastSummary struct {
@@ -284,6 +323,11 @@ type StatusResponse struct {
 // StatusResponseStatus defines model for StatusResponse.Status.
 type StatusResponseStatus string
 
+// UpdateNoteRequest defines model for UpdateNoteRequest.
+type UpdateNoteRequest struct {
+	Content string `json:"content"`
+}
+
 // BadRequest defines model for BadRequest.
 type BadRequest = ErrorResponse
 
@@ -299,11 +343,23 @@ type ListEpisodesParams struct {
 	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
+// CreateCaptureJSONRequestBody defines body for CreateCapture for application/json ContentType.
+type CreateCaptureJSONRequestBody = CreateCaptureRequest
+
+// CreateEpisodeNoteJSONRequestBody defines body for CreateEpisodeNote for application/json ContentType.
+type CreateEpisodeNoteJSONRequestBody = CreateNoteRequest
+
 // CreateImportJSONRequestBody defines body for CreateImport for application/json ContentType.
 type CreateImportJSONRequestBody = CreateImportRequest
 
+// UpdateNoteJSONRequestBody defines body for UpdateNote for application/json ContentType.
+type UpdateNoteJSONRequestBody = UpdateNoteRequest
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// CreateCapture Capture a note for an Episode or URL
+	// (POST /api/v1/captures)
+	CreateCapture(w http.ResponseWriter, r *http.Request)
 	// ListEpisodes List recently imported episodes
 	// (GET /api/v1/episodes)
 	ListEpisodes(w http.ResponseWriter, r *http.Request, params ListEpisodesParams)
@@ -313,12 +369,24 @@ type ServerInterface interface {
 	// GetEpisode Get an Episode with Podcast and Sources
 	// (GET /api/v1/episodes/{episodeId})
 	GetEpisode(w http.ResponseWriter, r *http.Request, episodeId string)
+	// ListEpisodeNotes List active Notes for an Episode
+	// (GET /api/v1/episodes/{episodeId}/notes)
+	ListEpisodeNotes(w http.ResponseWriter, r *http.Request, episodeId string)
+	// CreateEpisodeNote Create an idempotent Note for an Episode
+	// (POST /api/v1/episodes/{episodeId}/notes)
+	CreateEpisodeNote(w http.ResponseWriter, r *http.Request, episodeId string)
 	// CreateImport Queue an episode import
 	// (POST /api/v1/imports)
 	CreateImport(w http.ResponseWriter, r *http.Request)
 	// GetImport Get an import result
 	// (GET /api/v1/imports/{importId})
 	GetImport(w http.ResponseWriter, r *http.Request, importId string)
+	// DeleteNote Soft-delete a Note
+	// (DELETE /api/v1/notes/{noteId})
+	DeleteNote(w http.ResponseWriter, r *http.Request, noteId string)
+	// UpdateNote Update a Note
+	// (PATCH /api/v1/notes/{noteId})
+	UpdateNote(w http.ResponseWriter, r *http.Request, noteId string)
 	// GetLiveness Process liveness
 	// (GET /healthz)
 	GetLiveness(w http.ResponseWriter, r *http.Request)
@@ -330,6 +398,12 @@ type ServerInterface interface {
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
+
+// CreateCapture Capture a note for an Episode or URL
+// (POST /api/v1/captures)
+func (_ Unimplemented) CreateCapture(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
 
 // ListEpisodes List recently imported episodes
 // (GET /api/v1/episodes)
@@ -349,6 +423,18 @@ func (_ Unimplemented) GetEpisode(w http.ResponseWriter, r *http.Request, episod
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// ListEpisodeNotes List active Notes for an Episode
+// (GET /api/v1/episodes/{episodeId}/notes)
+func (_ Unimplemented) ListEpisodeNotes(w http.ResponseWriter, r *http.Request, episodeId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CreateEpisodeNote Create an idempotent Note for an Episode
+// (POST /api/v1/episodes/{episodeId}/notes)
+func (_ Unimplemented) CreateEpisodeNote(w http.ResponseWriter, r *http.Request, episodeId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // CreateImport Queue an episode import
 // (POST /api/v1/imports)
 func (_ Unimplemented) CreateImport(w http.ResponseWriter, r *http.Request) {
@@ -358,6 +444,18 @@ func (_ Unimplemented) CreateImport(w http.ResponseWriter, r *http.Request) {
 // GetImport Get an import result
 // (GET /api/v1/imports/{importId})
 func (_ Unimplemented) GetImport(w http.ResponseWriter, r *http.Request, importId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// DeleteNote Soft-delete a Note
+// (DELETE /api/v1/notes/{noteId})
+func (_ Unimplemented) DeleteNote(w http.ResponseWriter, r *http.Request, noteId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// UpdateNote Update a Note
+// (PATCH /api/v1/notes/{noteId})
+func (_ Unimplemented) UpdateNote(w http.ResponseWriter, r *http.Request, noteId string) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -381,6 +479,20 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// CreateCapture operation middleware
+func (siw *ServerInterfaceWrapper) CreateCapture(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateCapture(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // ListEpisodes operation middleware
 func (siw *ServerInterfaceWrapper) ListEpisodes(w http.ResponseWriter, r *http.Request) {
@@ -480,6 +592,58 @@ func (siw *ServerInterfaceWrapper) GetEpisode(w http.ResponseWriter, r *http.Req
 	handler.ServeHTTP(w, r)
 }
 
+// ListEpisodeNotes operation middleware
+func (siw *ServerInterfaceWrapper) ListEpisodeNotes(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "episodeId" -------------
+	var episodeId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "episodeId", chi.URLParam(r, "episodeId"), &episodeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "episodeId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListEpisodeNotes(w, r, episodeId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateEpisodeNote operation middleware
+func (siw *ServerInterfaceWrapper) CreateEpisodeNote(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "episodeId" -------------
+	var episodeId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "episodeId", chi.URLParam(r, "episodeId"), &episodeId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "episodeId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateEpisodeNote(w, r, episodeId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // CreateImport operation middleware
 func (siw *ServerInterfaceWrapper) CreateImport(w http.ResponseWriter, r *http.Request) {
 
@@ -511,6 +675,58 @@ func (siw *ServerInterfaceWrapper) GetImport(w http.ResponseWriter, r *http.Requ
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetImport(w, r, importId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteNote operation middleware
+func (siw *ServerInterfaceWrapper) DeleteNote(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "noteId" -------------
+	var noteId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "noteId", chi.URLParam(r, "noteId"), &noteId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "noteId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteNote(w, r, noteId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateNote operation middleware
+func (siw *ServerInterfaceWrapper) UpdateNote(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "noteId" -------------
+	var noteId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "noteId", chi.URLParam(r, "noteId"), &noteId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "noteId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateNote(w, r, noteId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -681,6 +897,21 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/episodes/{episodeId}", wrapper.GetEpisode)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/captures", wrapper.CreateCapture)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/episodes/{episodeId}/notes", wrapper.ListEpisodeNotes)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/episodes/{episodeId}/notes", wrapper.CreateEpisodeNote)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/api/v1/notes/{noteId}", wrapper.DeleteNote)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/api/v1/notes/{noteId}", wrapper.UpdateNote)
 	})
 
 	return r

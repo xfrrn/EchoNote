@@ -35,7 +35,7 @@ func TestHealthEndpoints(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			router := NewRouter(pingerFunc(func(context.Context) error { return test.pingError }), nil, nil, pgtype.UUID{}, logger)
+			router := NewRouter(pingerFunc(func(context.Context) error { return test.pingError }), nil, nil, nil, pgtype.UUID{}, logger)
 			request := httptest.NewRequest(http.MethodGet, test.path, nil)
 			response := httptest.NewRecorder()
 			router.ServeHTTP(response, request)
@@ -58,7 +58,7 @@ func TestHealthEndpoints(t *testing.T) {
 
 func TestImportRejectsInvalidInputBeforeDatabase(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	router := NewRouter(pingerFunc(func(context.Context) error { return nil }), nil, nil, pgtype.UUID{}, logger)
+	router := NewRouter(pingerFunc(func(context.Context) error { return nil }), nil, nil, nil, pgtype.UUID{}, logger)
 	tests := []struct {
 		method string
 		path   string
@@ -81,7 +81,7 @@ func TestImportRejectsInvalidInputBeforeDatabase(t *testing.T) {
 
 func TestLibraryRejectsInvalidParametersBeforeDatabase(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	router := NewRouter(pingerFunc(func(context.Context) error { return nil }), nil, nil, pgtype.UUID{}, logger)
+	router := NewRouter(pingerFunc(func(context.Context) error { return nil }), nil, nil, nil, pgtype.UUID{}, logger)
 	tests := []struct {
 		method string
 		path   string
@@ -94,6 +94,41 @@ func TestLibraryRejectsInvalidParametersBeforeDatabase(t *testing.T) {
 	}
 	for _, test := range tests {
 		request := httptest.NewRequest(test.method, test.path, nil)
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("%s %s status=%d body=%s", test.method, test.path, response.Code, response.Body.String())
+		}
+	}
+}
+
+func TestNotesRejectInvalidInputBeforeDatabase(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	router := NewRouter(pingerFunc(func(context.Context) error { return nil }), nil, nil, nil, pgtype.UUID{}, logger)
+	const (
+		id        = "11111111-1111-4111-8111-111111111111"
+		otherID   = "22222222-2222-4222-8222-222222222222"
+		createdAt = "2026-08-20T19:32:00+08:00"
+	)
+	tests := []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{method: http.MethodPost, path: "/api/v1/captures", body: `{}`},
+		{method: http.MethodPost, path: "/api/v1/captures", body: `{"client_note_id":"` + id + `","content":"note","created_at":"` + createdAt + `"}`},
+		{method: http.MethodPost, path: "/api/v1/captures", body: `{"client_note_id":"` + id + `","episode_id":"` + otherID + `","episode_url":"https://example.com/feed","content":"note","created_at":"` + createdAt + `"}`},
+		{method: http.MethodPost, path: "/api/v1/captures", body: `{"client_note_id":"` + id + `","episode_id":"bad","content":"note","created_at":"` + createdAt + `"}`},
+		{method: http.MethodPost, path: "/api/v1/captures", body: `{"client_note_id":"` + id + `","episode_url":"file:///tmp/audio.mp3","content":"note","created_at":"` + createdAt + `"}`},
+		{method: http.MethodGet, path: "/api/v1/episodes/not-a-uuid/notes"},
+		{method: http.MethodPost, path: "/api/v1/episodes/" + otherID + "/notes", body: `{"client_note_id":"` + id + `","content":" ","created_at":"` + createdAt + `"}`},
+		{method: http.MethodPatch, path: "/api/v1/notes/not-a-uuid", body: `{"content":"note"}`},
+		{method: http.MethodPatch, path: "/api/v1/notes/" + otherID, body: `{"content":" "}`},
+		{method: http.MethodDelete, path: "/api/v1/notes/not-a-uuid"},
+	}
+	for _, test := range tests {
+		request := httptest.NewRequest(test.method, test.path, strings.NewReader(test.body))
+		request.Header.Set("Content-Type", "application/json")
 		response := httptest.NewRecorder()
 		router.ServeHTTP(response, request)
 		if response.Code != http.StatusBadRequest {

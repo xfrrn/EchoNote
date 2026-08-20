@@ -33,6 +33,7 @@ DELETE /api/v1/episodes/{episode_id}
 - `transcription_status`
 - `ai_status`
 - Source 数量
+- 未删除 Note 数量（Phase 4 补充）
 - `total / limit / offset`
 
 `limit` 默认 50，允许 1–100；`offset` 必须为非负 32 位整数。当前产品是个人资料库，offset 分页足够简单；只有实际出现深分页性能问题时才改为 cursor，不预建两套分页协议。
@@ -88,6 +89,8 @@ Episode 与孤立 Podcast 的处理在同一事务内。删除后重新导入同
 
 保留 Import/Job 历史是为了任务审计；成功 Import 在 Episode 被删除后会保留 `succeeded`，但不再返回 `episode_id`。
 
+Phase 4 增加了 Pending Capture Episode：删除这类 Episode 时会先取消仍为 `queued/running` 的关联 Import Job，再执行上述级联，防止 Worker 在删除后重新创建 Episode。Import 与 Job 记录仍保留用于审计。
+
 ## Migration 决策
 
 Phase 2 Migration v2 已包含本阶段需要的 `podcasts`、`episodes`、`episode_sources`、关系、状态约束和删除行为。本阶段只有读 API 与已有关系上的事务删除，不需要修改 schema，因此没有创建空的 Migration v3。
@@ -104,7 +107,7 @@ Phase 2 Migration v2 已包含本阶段需要的 `podcasts`、`episodes`、`epis
 
 ### 2. Notes 数量延后
 
-整体方案提到列表展示笔记数量，但当前开发顺序把 Notes 放在 Phase 4，数据库还没有 `notes` 表。本阶段不返回伪造的 `note_count: 0`；Phase 4 创建真实 Notes 后再同步扩展 OpenAPI 与查询。
+整体方案提到列表展示笔记数量，但当前开发顺序把 Notes 放在 Phase 4，Phase 3 当时没有 `notes` 表，因此没有返回伪造的 `note_count: 0`。Phase 4 已创建真实 Notes，并同步为列表增加只统计未删除记录的 `note_count`。
 
 ### 3. Web Demo 保持 Mock
 
@@ -134,4 +137,4 @@ pnpm build
 
 ## 下一阶段入口
 
-Phase 4 在现有 Episode 用户边界上实现 Capture、Notes、离线同步与 `client_note_id` 幂等。Library 列表可在 Notes 表落地后增加真实 `note_count`。
+Phase 4 已完成 Capture、Notes、离线同步幂等与真实 `note_count`，见 [`phase-4-notes.md`](phase-4-notes.md)。下一阶段按开发顺序进入 Transcription。

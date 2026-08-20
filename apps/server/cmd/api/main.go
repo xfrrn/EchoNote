@@ -49,6 +49,7 @@ func run() error {
 			pool,
 			repository.NewImportRepository(pool),
 			repository.NewLibraryRepository(pool),
+			repository.NewNotesRepository(pool),
 			cfg.UserID,
 			logger,
 		),

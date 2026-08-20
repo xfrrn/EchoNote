@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: EchoNote API
-  version: 0.3.0
+  version: 0.4.0
   description: EchoNote modular-monolith HTTP API.
 paths:
   /healthz:
@@ -165,6 +165,148 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
+  /api/v1/captures:
+    post:
+      operationId: createCapture
+      summary: Capture a note for an Episode or URL
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCaptureRequest"
+      responses:
+        "200":
+          description: Idempotent replay of an existing capture.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CaptureResponse"
+        "201":
+          description: Capture created; URL captures also queue an Import.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CaptureResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/episodes/{episodeId}/notes:
+    parameters:
+      - name: episodeId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: listEpisodeNotes
+      summary: List active Notes for an Episode
+      responses:
+        "200":
+          description: Notes ordered by client creation time, newest first.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NoteListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      operationId: createEpisodeNote
+      summary: Create an idempotent Note for an Episode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateNoteRequest"
+      responses:
+        "200":
+          description: Idempotent replay of an existing Note.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+        "201":
+          description: Note created.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/notes/{noteId}:
+    parameters:
+      - name: noteId
+        in: path
+        required: true
+        schema:
+          type: string
+    patch:
+      operationId: updateNote
+      summary: Update a Note
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateNoteRequest"
+      responses:
+        "200":
+          description: Note updated.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      operationId: deleteNote
+      summary: Soft-delete a Note
+      responses:
+        "204":
+          description: Note deleted or already deleted.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
 components:
   headers:
     RequestID:
@@ -267,6 +409,102 @@ components:
           type: string
         message:
           type: string
+    CreateCaptureRequest:
+      type: object
+      additionalProperties: false
+      description: Exactly one of episode_id and episode_url must be supplied.
+      required:
+        - client_note_id
+        - content
+        - created_at
+      properties:
+        client_note_id:
+          type: string
+        episode_id:
+          type: string
+        episode_url:
+          type: string
+          minLength: 1
+          maxLength: 4096
+        content:
+          type: string
+          minLength: 1
+        created_at:
+          type: string
+          format: date-time
+    CreateNoteRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - client_note_id
+        - content
+        - created_at
+      properties:
+        client_note_id:
+          type: string
+        content:
+          type: string
+          minLength: 1
+        created_at:
+          type: string
+          format: date-time
+    UpdateNoteRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - content
+      properties:
+        content:
+          type: string
+          minLength: 1
+    Note:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - episode_id
+        - client_note_id
+        - content
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+        episode_id:
+          type: string
+        client_note_id:
+          type: string
+        content:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        deleted_at:
+          type: string
+          format: date-time
+    CaptureResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - note
+      properties:
+        note:
+          $ref: "#/components/schemas/Note"
+        import_id:
+          type: string
+    NoteListResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Note"
     ResolveStatus:
       type: string
       enum:
@@ -321,6 +559,7 @@ components:
         - transcription_status
         - ai_status
         - source_count
+        - note_count
         - created_at
         - updated_at
       properties:
@@ -346,6 +585,10 @@ components:
         ai_status:
           $ref: "#/components/schemas/ProcessingStatus"
         source_count:
+          type: integer
+          format: int64
+          minimum: 0
+        note_count:
           type: integer
           format: int64
           minimum: 0

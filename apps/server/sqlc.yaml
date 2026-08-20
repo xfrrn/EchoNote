@@ -4,6 +4,7 @@ sql:
     schema:
       - migrations/000001_phase1.up.sql
       - migrations/000002_imports.up.sql
+      - migrations/000003_notes.up.sql
     queries: internal/database/queries
     gen:
       go:

@@ -21,7 +21,14 @@ SELECT
         FROM episode_sources AS source
         WHERE source.episode_id = episode.id
           AND source.user_id = episode.user_id
-    )::bigint AS source_count
+    )::bigint AS source_count,
+    (
+        SELECT count(*)
+        FROM notes AS note
+        WHERE note.episode_id = episode.id
+          AND note.user_id = episode.user_id
+          AND note.deleted_at IS NULL
+    )::bigint AS note_count
 FROM episodes AS episode
 LEFT JOIN podcasts AS podcast
   ON podcast.id = episode.podcast_id
@@ -87,6 +94,25 @@ DELETE FROM episodes
 WHERE id = sqlc.arg(episode_id)
   AND user_id = sqlc.arg(user_id)
 RETURNING podcast_id;
+
+-- name: CancelEpisodeImportJobs :many
+UPDATE jobs
+SET status = 'canceled',
+    stage = 'canceled',
+    locked_by = NULL,
+    locked_at = NULL,
+    error_code = NULL,
+    error_message = NULL,
+    updated_at = now(),
+    completed_at = now()
+WHERE id IN (
+    SELECT import_record.job_id
+    FROM imports AS import_record
+    WHERE import_record.episode_id = sqlc.arg(episode_id)
+      AND import_record.user_id = sqlc.arg(user_id)
+)
+  AND status IN ('queued', 'running')
+RETURNING *;
 
 -- name: DeleteOrphanPodcast :exec
 DELETE FROM podcasts AS podcast

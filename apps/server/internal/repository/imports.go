@@ -22,6 +22,8 @@ import (
 
 const ResolveEpisodeJobType = "resolve_episode"
 
+var ErrImportCanceled = errors.New("import canceled")
+
 type ImportRepository struct {
 	pool *pgxpool.Pool
 }
@@ -91,8 +93,24 @@ func (r *ImportRepository) SaveResolved(
 		if err != nil {
 			return pgtype.UUID{}, fmt.Errorf("lock import: %w", err)
 		}
+		if importRecord.JobStatus == "canceled" {
+			return pgtype.UUID{}, ErrImportCanceled
+		}
+		captureEpisodeID := pgtype.UUID{}
 		if importRecord.EpisodeID.Valid {
-			return importRecord.EpisodeID, nil
+			episode, err := queries.GetEpisodeForResolve(ctx, db.GetEpisodeForResolveParams{
+				EpisodeID: importRecord.EpisodeID, UserID: userID,
+			})
+			if err != nil {
+				return pgtype.UUID{}, fmt.Errorf("lock import episode: %w", err)
+			}
+			if episode.ResolveStatus == "completed" {
+				return episode.ID, nil
+			}
+			if episode.ResolveStatus != "pending" {
+				return pgtype.UUID{}, fmt.Errorf("import episode has unexpected resolve status %q", episode.ResolveStatus)
+			}
+			captureEpisodeID = episode.ID
 		}
 
 		locks := make([]string, len(identityKeys))
@@ -114,13 +132,18 @@ func (r *ImportRepository) SaveResolved(
 			return pgtype.UUID{}, fmt.Errorf("find episode identity: %w", err)
 		}
 		episodeExists := err == nil
+		if !episodeExists && captureEpisodeID.Valid {
+			episodeID = captureEpisodeID
+			episodeExists = true
+		}
 
 		podcastID, err := upsertResolvedPodcast(ctx, queries, userID, resolved)
 		if err != nil {
 			return pgtype.UUID{}, err
 		}
 		publishedAt := nullableTimestamptz(resolved.PublishedAt)
-		if !episodeExists {
+		switch {
+		case !episodeExists:
 			episode, createErr := queries.CreateEpisode(ctx, db.CreateEpisodeParams{
 				UserID: userID, PodcastID: podcastID, Title: strings.TrimSpace(resolved.EpisodeTitle),
 				Description: strings.TrimSpace(resolved.Description), PublishedAt: publishedAt,
@@ -130,7 +153,16 @@ func (r *ImportRepository) SaveResolved(
 				return pgtype.UUID{}, fmt.Errorf("create episode: %w", createErr)
 			}
 			episodeID = episode.ID
-		} else {
+		case captureEpisodeID.Valid && episodeID.Bytes == captureEpisodeID.Bytes:
+			if _, err := queries.ResolvePendingEpisode(ctx, db.ResolvePendingEpisodeParams{
+				PodcastID: podcastID, Title: strings.TrimSpace(resolved.EpisodeTitle),
+				Description: strings.TrimSpace(resolved.Description), PublishedAt: publishedAt,
+				DurationMs: max(resolved.DurationMS, 0), CoverUrl: strings.TrimSpace(resolved.PodcastCoverURL),
+				EpisodeID: episodeID, UserID: userID,
+			}); err != nil {
+				return pgtype.UUID{}, fmt.Errorf("resolve pending episode: %w", err)
+			}
+		default:
 			if _, err := queries.EnrichEpisode(ctx, db.EnrichEpisodeParams{
 				PodcastID: podcastID, Title: strings.TrimSpace(resolved.EpisodeTitle),
 				Description: strings.TrimSpace(resolved.Description), PublishedAt: publishedAt,
@@ -138,6 +170,18 @@ func (r *ImportRepository) SaveResolved(
 				EpisodeID: episodeID, UserID: userID,
 			}); err != nil {
 				return pgtype.UUID{}, fmt.Errorf("enrich episode: %w", err)
+			}
+			if captureEpisodeID.Valid {
+				if err := queries.MoveEpisodeNotes(ctx, db.MoveEpisodeNotesParams{
+					TargetEpisodeID: episodeID, SourceEpisodeID: captureEpisodeID, UserID: userID,
+				}); err != nil {
+					return pgtype.UUID{}, fmt.Errorf("move capture notes: %w", err)
+				}
+				if err := queries.DeletePendingEpisode(ctx, db.DeletePendingEpisodeParams{
+					EpisodeID: captureEpisodeID, UserID: userID,
+				}); err != nil {
+					return pgtype.UUID{}, fmt.Errorf("delete merged pending episode: %w", err)
+				}
 			}
 		}
 
@@ -156,7 +200,7 @@ func (r *ImportRepository) SaveResolved(
 		}); err != nil {
 			return pgtype.UUID{}, fmt.Errorf("save episode source: %w", err)
 		}
-		if err := queries.CompleteImport(ctx, db.CompleteImportParams{EpisodeID: episodeID, ImportID: importID, UserID: userID}); err != nil {
+		if err := queries.SetImportEpisode(ctx, db.SetImportEpisodeParams{EpisodeID: episodeID, ImportID: importID, UserID: userID}); err != nil {
 			return pgtype.UUID{}, fmt.Errorf("complete import: %w", err)
 		}
 		return episodeID, nil

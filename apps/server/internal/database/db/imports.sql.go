@@ -85,25 +85,6 @@ func (q *Queries) AddEpisodeSource(ctx context.Context, arg AddEpisodeSourcePara
 	return err
 }
 
-const completeImport = `-- name: CompleteImport :exec
-UPDATE imports
-SET episode_id = $1,
-    updated_at = now()
-WHERE id = $2
-  AND user_id = $3
-`
-
-type CompleteImportParams struct {
-	EpisodeID pgtype.UUID `json:"episode_id"`
-	ImportID  pgtype.UUID `json:"import_id"`
-	UserID    pgtype.UUID `json:"user_id"`
-}
-
-func (q *Queries) CompleteImport(ctx context.Context, arg CompleteImportParams) error {
-	_, err := q.db.Exec(ctx, completeImport, arg.EpisodeID, arg.ImportID, arg.UserID)
-	return err
-}
-
 const createEpisode = `-- name: CreateEpisode :one
 INSERT INTO episodes (
     user_id,
@@ -279,11 +260,12 @@ func (q *Queries) FindEpisodeByIdentityKeys(ctx context.Context, arg FindEpisode
 }
 
 const getImportForResolve = `-- name: GetImportForResolve :one
-SELECT id, user_id, submitted_url, job_id, episode_id, created_at, updated_at
-FROM imports
-WHERE id = $1
-  AND user_id = $2
-FOR UPDATE
+SELECT import_record.id, import_record.user_id, import_record.submitted_url, import_record.job_id, import_record.episode_id, import_record.created_at, import_record.updated_at, job.status AS job_status
+FROM imports AS import_record
+JOIN jobs AS job ON job.id = import_record.job_id
+WHERE import_record.id = $1
+  AND import_record.user_id = $2
+FOR UPDATE OF import_record
 `
 
 type GetImportForResolveParams struct {
@@ -291,9 +273,20 @@ type GetImportForResolveParams struct {
 	UserID   pgtype.UUID `json:"user_id"`
 }
 
-func (q *Queries) GetImportForResolve(ctx context.Context, arg GetImportForResolveParams) (Import, error) {
+type GetImportForResolveRow struct {
+	ID           pgtype.UUID        `json:"id"`
+	UserID       pgtype.UUID        `json:"user_id"`
+	SubmittedUrl string             `json:"submitted_url"`
+	JobID        pgtype.UUID        `json:"job_id"`
+	EpisodeID    pgtype.UUID        `json:"episode_id"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	JobStatus    string             `json:"job_status"`
+}
+
+func (q *Queries) GetImportForResolve(ctx context.Context, arg GetImportForResolveParams) (GetImportForResolveRow, error) {
 	row := q.db.QueryRow(ctx, getImportForResolve, arg.ImportID, arg.UserID)
-	var i Import
+	var i GetImportForResolveRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
@@ -302,6 +295,7 @@ func (q *Queries) GetImportForResolve(ctx context.Context, arg GetImportForResol
 		&i.EpisodeID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.JobStatus,
 	)
 	return i, err
 }
@@ -355,6 +349,25 @@ func (q *Queries) GetImportStatus(ctx context.Context, arg GetImportStatusParams
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const setImportEpisode = `-- name: SetImportEpisode :exec
+UPDATE imports
+SET episode_id = $1,
+    updated_at = now()
+WHERE id = $2
+  AND user_id = $3
+`
+
+type SetImportEpisodeParams struct {
+	EpisodeID pgtype.UUID `json:"episode_id"`
+	ImportID  pgtype.UUID `json:"import_id"`
+	UserID    pgtype.UUID `json:"user_id"`
+}
+
+func (q *Queries) SetImportEpisode(ctx context.Context, arg SetImportEpisodeParams) error {
+	_, err := q.db.Exec(ctx, setImportEpisode, arg.EpisodeID, arg.ImportID, arg.UserID)
+	return err
 }
 
 const setImportJob = `-- name: SetImportJob :exec

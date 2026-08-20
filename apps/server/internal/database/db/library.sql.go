@@ -11,6 +11,71 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const cancelEpisodeImportJobs = `-- name: CancelEpisodeImportJobs :many
+UPDATE jobs
+SET status = 'canceled',
+    stage = 'canceled',
+    locked_by = NULL,
+    locked_at = NULL,
+    error_code = NULL,
+    error_message = NULL,
+    updated_at = now(),
+    completed_at = now()
+WHERE id IN (
+    SELECT import_record.job_id
+    FROM imports AS import_record
+    WHERE import_record.episode_id = $1
+      AND import_record.user_id = $2
+)
+  AND status IN ('queued', 'running')
+RETURNING id, user_id, type, entity_type, entity_id, payload, status, stage, priority, attempt, max_attempts, run_after, locked_by, locked_at, error_code, error_message, created_at, updated_at, completed_at
+`
+
+type CancelEpisodeImportJobsParams struct {
+	EpisodeID pgtype.UUID `json:"episode_id"`
+	UserID    pgtype.UUID `json:"user_id"`
+}
+
+func (q *Queries) CancelEpisodeImportJobs(ctx context.Context, arg CancelEpisodeImportJobsParams) ([]Job, error) {
+	rows, err := q.db.Query(ctx, cancelEpisodeImportJobs, arg.EpisodeID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Job{}
+	for rows.Next() {
+		var i Job
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Type,
+			&i.EntityType,
+			&i.EntityID,
+			&i.Payload,
+			&i.Status,
+			&i.Stage,
+			&i.Priority,
+			&i.Attempt,
+			&i.MaxAttempts,
+			&i.RunAfter,
+			&i.LockedBy,
+			&i.LockedAt,
+			&i.ErrorCode,
+			&i.ErrorMessage,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.CompletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const countLibraryEpisodes = `-- name: CountLibraryEpisodes :one
 SELECT count(*)
 FROM episodes
@@ -231,7 +296,14 @@ SELECT
         FROM episode_sources AS source
         WHERE source.episode_id = episode.id
           AND source.user_id = episode.user_id
-    )::bigint AS source_count
+    )::bigint AS source_count,
+    (
+        SELECT count(*)
+        FROM notes AS note
+        WHERE note.episode_id = episode.id
+          AND note.user_id = episode.user_id
+          AND note.deleted_at IS NULL
+    )::bigint AS note_count
 FROM episodes AS episode
 LEFT JOIN podcasts AS podcast
   ON podcast.id = episode.podcast_id
@@ -266,6 +338,7 @@ type ListLibraryEpisodesRow struct {
 	PodcastCoverUrl     *string            `json:"podcast_cover_url"`
 	PodcastFeedUrl      *string            `json:"podcast_feed_url"`
 	SourceCount         int64              `json:"source_count"`
+	NoteCount           int64              `json:"note_count"`
 }
 
 func (q *Queries) ListLibraryEpisodes(ctx context.Context, arg ListLibraryEpisodesParams) ([]ListLibraryEpisodesRow, error) {
@@ -295,6 +368,7 @@ func (q *Queries) ListLibraryEpisodes(ctx context.Context, arg ListLibraryEpisod
 			&i.PodcastCoverUrl,
 			&i.PodcastFeedUrl,
 			&i.SourceCount,
+			&i.NoteCount,
 		); err != nil {
 			return nil, err
 		}
