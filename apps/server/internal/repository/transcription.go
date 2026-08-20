@@ -539,6 +539,9 @@ func (r *TranscriptionRepository) ActivateTranscript(
 		if err := transcriptionEvent(ctx, queries, run.ID, "completed", nil); err != nil {
 			return db.TranscriptVersion{}, err
 		}
+		if err := enqueueSearchBuild(ctx, queries, run.UserID, run.EpisodeID); err != nil {
+			return db.TranscriptVersion{}, err
+		}
 		if _, err := enqueue(ctx, queries, runJob(run, CleanupAudioJobType, time.Time{}, map[string]string{"scope": "audio"})); err != nil {
 			return db.TranscriptVersion{}, err
 		}
@@ -814,9 +817,20 @@ func (r *TranscriptionRepository) RenameSpeaker(ctx context.Context, userID, tra
 		if role == "" {
 			role = current.Role
 		}
-		return queries.RenameTranscriptSpeaker(ctx, db.RenameTranscriptSpeakerParams{
+		updated, err := queries.RenameTranscriptSpeaker(ctx, db.RenameTranscriptSpeakerParams{
 			DisplayName: displayName, Role: role, SpeakerID: speakerID, TranscriptID: transcriptID, UserID: userID,
 		})
+		if err != nil {
+			return db.TranscriptSpeaker{}, err
+		}
+		version, err := queries.GetTranscriptVersion(ctx, db.GetTranscriptVersionParams{TranscriptID: transcriptID, UserID: userID})
+		if err != nil {
+			return db.TranscriptSpeaker{}, err
+		}
+		if err := enqueueSearchBuild(ctx, queries, userID, version.EpisodeID); err != nil {
+			return db.TranscriptSpeaker{}, err
+		}
+		return updated, nil
 	})
 	return speaker, wrap("rename transcript speaker", err)
 }
@@ -846,6 +860,13 @@ func (r *TranscriptionRepository) MergeSpeakers(ctx context.Context, userID, tra
 			return db.TranscriptSpeaker{}, err
 		}
 		if err := queries.DeleteTranscriptSpeaker(ctx, db.DeleteTranscriptSpeakerParams{SpeakerID: sourceID, TranscriptID: transcriptID}); err != nil {
+			return db.TranscriptSpeaker{}, err
+		}
+		version, err := queries.GetTranscriptVersion(ctx, db.GetTranscriptVersionParams{TranscriptID: transcriptID, UserID: userID})
+		if err != nil {
+			return db.TranscriptSpeaker{}, err
+		}
+		if err := enqueueSearchBuild(ctx, queries, userID, version.EpisodeID); err != nil {
 			return db.TranscriptSpeaker{}, err
 		}
 		return target, nil

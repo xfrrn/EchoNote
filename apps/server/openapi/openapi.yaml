@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: EchoNote API
-  version: 0.5.0
+  version: 0.6.0
   description: EchoNote modular-monolith HTTP API.
 paths:
   /healthz:
@@ -301,6 +301,76 @@ paths:
           headers:
             X-Request-ID:
               $ref: "#/components/headers/RequestID"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/search:
+    get:
+      operationId: searchContent
+      summary: Search Notes, Transcript, and indexed AI content
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 500
+        - name: scope
+          in: query
+          schema:
+            $ref: "#/components/schemas/SearchScope"
+            default: library
+        - name: episode_id
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        "200":
+          description: Ranked keyword or hybrid search results.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/search/reindex:
+    post:
+      operationId: reindexSearch
+      summary: Enqueue an explicit Search index rebuild
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReindexSearchRequest"
+      responses:
+        "202":
+          description: Rebuild Jobs were queued.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReindexSearchResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
         "404":
@@ -812,6 +882,96 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Note"
+    SearchScope:
+      type: string
+      enum:
+        - library
+        - episode
+    SearchMode:
+      type: string
+      enum:
+        - keyword
+        - hybrid
+    SearchDocumentType:
+      type: string
+      enum:
+        - note
+        - transcript
+        - ai_artifact
+    SearchResult:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - document_type
+        - source_id
+        - episode_id
+        - episode_title
+        - podcast_title
+        - snippet
+        - score
+      properties:
+        id:
+          type: string
+        document_type:
+          $ref: "#/components/schemas/SearchDocumentType"
+        source_id:
+          type: string
+        episode_id:
+          type: string
+        episode_title:
+          type: string
+        podcast_title:
+          type: string
+        speaker_id:
+          type: string
+        speaker_name:
+          type: string
+        start_ms:
+          type: integer
+          format: int64
+          minimum: 0
+        end_ms:
+          type: integer
+          format: int64
+          minimum: 1
+        snippet:
+          type: string
+        score:
+          type: number
+          format: double
+    SearchResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - mode
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchResult"
+        mode:
+          $ref: "#/components/schemas/SearchMode"
+    ReindexSearchRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - scope
+      properties:
+        scope:
+          $ref: "#/components/schemas/SearchScope"
+        episode_id:
+          type: string
+    ReindexSearchResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - queued
+      properties:
+        queued:
+          type: integer
+          minimum: 0
     TranscriptionProfile:
       type: string
       enum:

@@ -62,6 +62,7 @@ func TestNotesHTTPFlow(t *testing.T) {
 		repository.NewLibraryRepository(pool),
 		repository.NewNotesRepository(pool),
 		nil,
+		nil,
 		false,
 		userID,
 		slog.New(slog.NewTextHandler(io.Discard, nil)),

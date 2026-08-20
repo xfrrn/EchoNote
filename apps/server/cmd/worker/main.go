@@ -12,9 +12,11 @@ import (
 
 	"github.com/Actify/echonote/apps/server/internal/config"
 	"github.com/Actify/echonote/apps/server/internal/database"
+	searchdomain "github.com/Actify/echonote/apps/server/internal/domain/search"
 	"github.com/Actify/echonote/apps/server/internal/logging"
 	"github.com/Actify/echonote/apps/server/internal/provider/asr"
 	"github.com/Actify/echonote/apps/server/internal/provider/audio"
+	"github.com/Actify/echonote/apps/server/internal/provider/embedding"
 	podcastprovider "github.com/Actify/echonote/apps/server/internal/provider/podcast"
 	"github.com/Actify/echonote/apps/server/internal/provider/storage"
 	"github.com/Actify/echonote/apps/server/internal/repository"
@@ -55,6 +57,18 @@ func run() error {
 	resolver := podcastprovider.NewResolver(httpClient)
 	handlers := map[string]workerapp.Handler{
 		repository.ResolveEpisodeJobType: service.NewResolveImportHandler(imports, resolver),
+	}
+	var embeddingProvider searchdomain.EmbeddingProvider
+	if cfg.EmbeddingEnabled() {
+		embeddingProvider, err = embedding.NewAliyun(cfg.EmbeddingEndpoint, cfg.EmbeddingAPIKey, nil)
+		if err != nil {
+			return fmt.Errorf("configure embedding: %w", err)
+		}
+	} else {
+		logger.Warn("semantic indexing disabled", "reason", cfg.ValidateEmbedding())
+	}
+	for jobType, handler := range service.NewSearchWorkflow(repository.NewSearchRepository(pool), embeddingProvider).Handlers() {
+		handlers[jobType] = handler
 	}
 	if cfg.TranscriptionEnabled() {
 		objectStore, err := storage.NewAliyunOSS(storage.AliyunOSSConfig{

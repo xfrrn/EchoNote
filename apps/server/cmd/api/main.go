@@ -14,9 +14,12 @@ import (
 
 	"github.com/Actify/echonote/apps/server/internal/config"
 	"github.com/Actify/echonote/apps/server/internal/database"
+	searchdomain "github.com/Actify/echonote/apps/server/internal/domain/search"
 	httpapi "github.com/Actify/echonote/apps/server/internal/http"
 	"github.com/Actify/echonote/apps/server/internal/logging"
+	"github.com/Actify/echonote/apps/server/internal/provider/embedding"
 	"github.com/Actify/echonote/apps/server/internal/repository"
+	"github.com/Actify/echonote/apps/server/internal/service"
 )
 
 func main() {
@@ -42,6 +45,16 @@ func run() error {
 		return err
 	}
 	defer pool.Close()
+	var embeddingProvider searchdomain.EmbeddingProvider
+	if cfg.EmbeddingEnabled() {
+		embeddingProvider, err = embedding.NewAliyun(cfg.EmbeddingEndpoint, cfg.EmbeddingAPIKey, nil)
+		if err != nil {
+			return fmt.Errorf("configure embedding: %w", err)
+		}
+	} else {
+		logger.Warn("semantic search disabled", "reason", cfg.ValidateEmbedding())
+	}
+	searchRepository := repository.NewSearchRepository(pool)
 
 	server := &http.Server{
 		Addr: ":" + strconv.Itoa(cfg.ServerPort),
@@ -51,6 +64,7 @@ func run() error {
 			repository.NewLibraryRepository(pool),
 			repository.NewNotesRepository(pool),
 			repository.NewTranscriptionRepository(pool),
+			service.NewSearchService(searchRepository, embeddingProvider),
 			cfg.TranscriptionEnabled(),
 			cfg.UserID,
 			logger,

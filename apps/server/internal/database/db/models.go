@@ -108,6 +108,33 @@ type Podcast struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
+type SearchChunk struct {
+	ID               pgtype.UUID        `json:"id"`
+	SearchDocumentID pgtype.UUID        `json:"search_document_id"`
+	ChunkIndex       int32              `json:"chunk_index"`
+	Text             string             `json:"text"`
+	StartMs          *int64             `json:"start_ms"`
+	EndMs            *int64             `json:"end_ms"`
+	SpeakerID        pgtype.UUID        `json:"speaker_id"`
+	Embedding        *string            `json:"embedding"`
+	EmbeddingModel   *string            `json:"embedding_model"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SearchDocument struct {
+	ID           pgtype.UUID        `json:"id"`
+	UserID       pgtype.UUID        `json:"user_id"`
+	EpisodeID    pgtype.UUID        `json:"episode_id"`
+	DocumentType string             `json:"document_type"`
+	SourceID     pgtype.UUID        `json:"source_id"`
+	Content      string             `json:"content"`
+	ContentHash  string             `json:"content_hash"`
+	Metadata     []byte             `json:"metadata"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
 type TranscriptSegment struct {
 	ID                  pgtype.UUID        `json:"id"`
 	TranscriptVersionID pgtype.UUID        `json:"transcript_version_id"`

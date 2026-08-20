@@ -1,10 +1,10 @@
 # EchoNote 后端
 
-Go 模块化单体，当前完成 Phase 1–5：基础设施、Import、Library、Notes，以及完整的异步 Transcription / Transcript / Speaker 垂直切片。
+Go 模块化单体，当前完成 Phase 1–6：基础设施、Import、Library、Notes、异步 Transcription / Transcript / Speaker，以及 Search 垂直切片。
 
 ## 本地启动
 
-要求 Go 1.25+、PostgreSQL（最低支持 PostgreSQL 13，需提供 `gen_random_uuid()`）、FFmpeg 与 FFprobe。优先使用已有 PostgreSQL，并为 EchoNote 创建独立数据库。没有本地数据库时，仓库根目录提供可选 Compose：
+要求 Go 1.25+、PostgreSQL 13+、`pg_trgm`、pgvector 0.8+、FFmpeg 与 FFprobe。Migration 会执行 `CREATE EXTENSION`，但 PostgreSQL 服务端必须先安装 pgvector 扩展文件。优先使用已有 PostgreSQL，并为 EchoNote 创建独立数据库。没有本地数据库时，仓库根目录提供可选 Compose：
 
 ```bash
 docker compose up -d postgres
@@ -25,7 +25,7 @@ go run ./cmd/api
 go run ./cmd/worker
 ```
 
-API 和 Worker 是独立进程。Worker 处理 `resolve_episode` 及 Phase 5 转录状态机，同时续租并回收超时任务。Auth 尚未进入当前 Phase，`ECHONOTE_USER_ID` 暂时提供单用户数据边界。
+API 和 Worker 是独立进程。Worker 处理 `resolve_episode`、转录状态机、Search 索引与 Embedding，同时续租并回收超时任务。Auth 尚未进入当前 Phase，`ECHONOTE_USER_ID` 暂时提供单用户数据边界。
 
 未配置 ASR / Object Storage 时，已有 Import、Library、Notes 与 Transcript 读取仍可运行；新建和重试转录返回 503，Worker 只注册已有业务 Job。启用转录至少需要：
 
@@ -40,6 +40,16 @@ STORAGE_SECRET_KEY=...
 ```
 
 完整配置和可选的 HTTPS Endpoint 见仓库根目录 `.env.example`。真实密钥不得提交。
+
+未配置 Embedding 时，Notes/Transcript 关键词搜索和索引重建仍可运行，响应 `mode=keyword`。启用语义与 Hybrid Search：
+
+```text
+EMBEDDING_PROVIDER=aliyun
+EMBEDDING_API_KEY=...
+EMBEDDING_ENDPOINT=https://dashscope.aliyuncs.com
+```
+
+生产环境建议把 Endpoint 配成所属地域的百炼 Workspace 专属 HTTPS 地址。模型固定为 `text-embedding-v4`，向量维度固定为 1024，与 Migration 列类型一致。
 
 ## 健康检查
 
@@ -105,6 +115,24 @@ POST /api/v1/transcripts/{transcript_id}/speakers/merge 合并 Speaker
 
 `economy` 使用 Paraformer-v2，`quality` 使用 Fun-ASR。音频统一转换为 16 kHz 单声道 FLAC，长音频按 90 分钟 Core Window 与 5 分钟左右重叠切片；算法和恢复语义见 `docs/architecture/transcription.md`。
 
+## Search API
+
+```text
+GET  /api/v1/search?q=融资&scope=library&limit=20
+GET  /api/v1/search?q=融资&scope=episode&episode_id={episode_id}
+POST /api/v1/search/reindex
+```
+
+搜索同时覆盖当前用户未删除的 Notes、当前 active Transcript，以及后续 Phase 7 写入的 AI Artifact。关键词候选使用精确子串优先和 `pg_trgm` 模糊匹配；配置 Embedding 后，再与 pgvector 余弦候选通过 RRF 融合。结果包含 Episode、Podcast、Speaker、时间、摘要与排序分数。
+
+重建请求体：
+
+```json
+{"scope":"episode","episode_id":"..."}
+```
+
+也可使用 `{"scope":"library"}` 重建整个 Library。Notes、Transcript Version 和 Speaker 变更会在原业务事务内自动创建 `build_keyword_index` Job。
+
 ## Migration 与代码生成
 
 ```bash
@@ -123,7 +151,7 @@ go test ./...
 go vet ./...
 ```
 
-PostgreSQL 集成测试默认跳过。显式提供隔离的测试数据库后会执行 Migration，并验证 Job 生命周期、跨来源去重、Library 分页、Notes HTTP 生命周期、并发离线幂等、3 小时转录、Speaker ID 对调、单 Chunk 恢复、Transcript Version、用户隔离与删除级联：
+PostgreSQL 集成测试默认跳过。显式提供隔离的测试数据库后会执行 Migration，并验证 Job 生命周期、跨来源去重、Library 分页、Notes HTTP 生命周期、并发离线幂等、3 小时转录、Speaker ID 对调、单 Chunk 恢复、Transcript Version、Search 重建、关键词/语义/RRF、用户隔离与删除级联：
 
 ```text
 ECHONOTE_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/echonote_test?sslmode=disable
@@ -140,13 +168,13 @@ cmd/migrate/             Migration CLI
 internal/config/         环境配置
 internal/database/       pgx 连接、migration 与 sqlc 生成代码
 internal/http/           Chi 路由、OpenAPI handler、中间件
-internal/domain/         Podcast 与 Transcription 领域规则
-internal/provider/       Podcast、音频、阿里云 ASR、OSS 与安全 HTTP Provider
+internal/domain/         Podcast、Transcription 与 Search 领域规则
+internal/provider/       Podcast、音频、阿里云 ASR/Embedding、OSS 与安全 HTTP Provider
 internal/repository/     业务持久化与 PostgreSQL Job Queue
-internal/service/        Import 与 Transcription Job 编排
+internal/service/        Import、Transcription 与 Search Job 编排
 internal/worker/         Job 消费、续租、分类重试与崩溃隔离
 migrations/              版本化 SQL
 openapi/                 HTTP 契约
 ```
 
-实施记录见 `docs/architecture/phase-1-foundation.md` 至 `docs/architecture/phase-5-transcription.md`；固定转录算法见 `docs/architecture/transcription.md`。
+实施记录见 `docs/architecture/phase-1-foundation.md` 至 `docs/architecture/phase-6-search.md`；固定转录算法见 `docs/architecture/transcription.md`。

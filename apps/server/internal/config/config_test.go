@@ -29,8 +29,24 @@ func TestLoad(t *testing.T) {
 	if cfg.ASRPollInterval != 3*time.Second || cfg.FFmpegPath != "ffmpeg" || cfg.FFprobePath != "ffprobe" {
 		t.Fatalf("unexpected transcription defaults: %+v", cfg)
 	}
+	if cfg.EmbeddingEndpoint != "https://dashscope.aliyuncs.com" {
+		t.Fatalf("unexpected embedding endpoint: %q", cfg.EmbeddingEndpoint)
+	}
 	if !cfg.UserID.Valid {
 		t.Fatal("expected ECHONOTE_USER_ID to be parsed")
+	}
+}
+
+func TestValidateEmbedding(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://localhost/echonote")
+	t.Setenv("EMBEDDING_PROVIDER", "aliyun")
+	t.Setenv("EMBEDDING_API_KEY", "test-key")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.ValidateEmbedding(); err != nil || !cfg.EmbeddingEnabled() {
+		t.Fatalf("enabled=%v err=%v", cfg.EmbeddingEnabled(), err)
 	}
 }
 
@@ -80,5 +96,14 @@ func TestLoadRejectsInsecureStorageEndpoint(t *testing.T) {
 	t.Setenv("STORAGE_ENDPOINT", "http://access:secret@oss.example.com")
 	if _, err := Load(); err == nil {
 		t.Fatal("expected insecure STORAGE_ENDPOINT to fail")
+	}
+}
+
+func TestLoadRejectsInsecureEmbeddingEndpoint(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://localhost/echonote")
+	t.Setenv("EMBEDDING_PROVIDER", "aliyun")
+	t.Setenv("EMBEDDING_ENDPOINT", "http://key@example.com/api/v1")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected insecure EMBEDDING_ENDPOINT to fail")
 	}
 }

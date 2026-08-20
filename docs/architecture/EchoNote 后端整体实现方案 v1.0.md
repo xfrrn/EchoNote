@@ -1,6 +1,6 @@
 # EchoNote 后端整体实现方案 v1.0
 
-> 实施记录：当前任务把原推荐“第二阶段”拆成独立的 Import、Library、Notes Phase。Import 的实际边界、数据库并发去重与安全策略见 [`phase-2-import.md`](phase-2-import.md)；Library 的查询、状态与删除语义见 [`phase-3-library.md`](phase-3-library.md)；Capture、离线幂等与 Notes 生命周期见 [`phase-4-notes.md`](phase-4-notes.md)；完整转录、Speaker 对齐、版本与云端任务恢复见 [`phase-5-transcription.md`](phase-5-transcription.md) 和 [`transcription.md`](transcription.md)。
+> 实施记录：当前任务把原推荐“第二阶段”拆成独立的 Import、Library、Notes Phase。Import 的实际边界、数据库并发去重与安全策略见 [`phase-2-import.md`](phase-2-import.md)；Library 的查询、状态与删除语义见 [`phase-3-library.md`](phase-3-library.md)；Capture、离线幂等与 Notes 生命周期见 [`phase-4-notes.md`](phase-4-notes.md)；完整转录、Speaker 对齐、版本与云端任务恢复见 [`phase-5-transcription.md`](phase-5-transcription.md) 和 [`transcription.md`](transcription.md)；关键词、Embedding、pgvector、Hybrid Search 与重建语义见 [`phase-6-search.md`](phase-6-search.md)。
 
 ## 1. 后端定位
 
@@ -626,6 +626,8 @@ text
 embedding
 ```
 
+Phase 6 实施澄清（2026-08-20）：语义块只合并同一 Speaker 的连续发言。若 Speaker 在达到 300 字前切换，保留短块，避免为了满足长度目标而丢失准确的 Speaker 和时间范围；长发言仍以约 600 字上限和最多约 80 字的完整 Segment 重叠切分。
+
 ### 混合排序
 
 ```text
@@ -1092,8 +1094,12 @@ start_ms
 end_ms
 speaker_id
 embedding
+embedding_model
 created_at
+updated_at
 ```
+
+`embedding_model` 是 Phase 6 为可重建索引增加的实现字段。模型发生变化时可只重建向量，不需要改变业务源数据。
 
 ### `ai_artifacts`
 
@@ -1218,7 +1224,10 @@ POST  /transcripts/{transcript_id}/speakers/merge
 ```http
 GET /search?q=FDE&scope=library
 GET /search?q=融资&scope=episode&episode_id=episode_123
+POST /search/reindex
 ```
+
+`POST /search/reindex` 是 Phase 6 增加的显式运维入口，用于全 Library 或单 Episode 重建，也用于在一次不自动重试的付费 Embedding Job 失败后由用户明确重试。
 
 ## AI
 
@@ -1467,9 +1476,15 @@ type EmbeddingProvider interface {
     Embed(
         ctx context.Context,
         texts []string,
+        inputType EmbeddingInputType,
     ) ([][]float32, error)
+
+    Model() string
+    Dimensions() int
 }
 ```
+
+Phase 6 将原草案接口补充为区分 `query` 与 `document`，并暴露模型和维度。原因是当前阿里云 Embedding API 明确建议非对称检索区分两种输入；模型/维度则用于验证 Provider 响应并选择兼容的已存向量。业务层仍只依赖 Provider 接口。
 
 ## Object Store
 

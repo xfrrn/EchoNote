@@ -65,6 +65,15 @@ func (r *LibraryRepository) Delete(ctx context.Context, userID, episodeID pgtype
 		if err != nil {
 			return struct{}{}, err
 		}
+		searchJobs, err := queries.CancelEpisodeSearchJobs(ctx, db.CancelEpisodeSearchJobsParams{UserID: userID, EpisodeID: episodeID})
+		if err != nil {
+			return struct{}{}, err
+		}
+		for _, job := range searchJobs {
+			if err := createEvent(ctx, queries, job, "canceled"); err != nil {
+				return struct{}{}, err
+			}
+		}
 		transcriptionJobs, err := queries.CancelEpisodeTranscriptionJobs(ctx, db.CancelEpisodeTranscriptionJobsParams{UserID: userID, EpisodeID: episodeID})
 		if err != nil {
 			return struct{}{}, err

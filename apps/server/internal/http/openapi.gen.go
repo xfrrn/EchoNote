@@ -124,6 +124,63 @@ func (e ResolveStatus) Valid() bool {
 	}
 }
 
+// Defines values for SearchDocumentType.
+const (
+	SearchDocumentTypeAiArtifact SearchDocumentType = "ai_artifact"
+	SearchDocumentTypeNote       SearchDocumentType = "note"
+	SearchDocumentTypeTranscript SearchDocumentType = "transcript"
+)
+
+// Valid indicates whether the value is a known member of the SearchDocumentType enum.
+func (e SearchDocumentType) Valid() bool {
+	switch e {
+	case SearchDocumentTypeAiArtifact:
+		return true
+	case SearchDocumentTypeNote:
+		return true
+	case SearchDocumentTypeTranscript:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SearchMode.
+const (
+	Hybrid  SearchMode = "hybrid"
+	Keyword SearchMode = "keyword"
+)
+
+// Valid indicates whether the value is a known member of the SearchMode enum.
+func (e SearchMode) Valid() bool {
+	switch e {
+	case Hybrid:
+		return true
+	case Keyword:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SearchScope.
+const (
+	Episode SearchScope = "episode"
+	Library SearchScope = "library"
+)
+
+// Valid indicates whether the value is a known member of the SearchScope enum.
+func (e SearchScope) Valid() bool {
+	switch e {
+	case Episode:
+		return true
+	case Library:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SourceType.
 const (
 	ApplePodcasts SourceType = "apple_podcasts"
@@ -379,8 +436,50 @@ type ReadinessResponseDatabase string
 // ReadinessResponseStatus defines model for ReadinessResponse.Status.
 type ReadinessResponseStatus string
 
+// ReindexSearchRequest defines model for ReindexSearchRequest.
+type ReindexSearchRequest struct {
+	EpisodeId *string     `json:"episode_id,omitempty"`
+	Scope     SearchScope `json:"scope"`
+}
+
+// ReindexSearchResponse defines model for ReindexSearchResponse.
+type ReindexSearchResponse struct {
+	Queued int `json:"queued"`
+}
+
 // ResolveStatus defines model for ResolveStatus.
 type ResolveStatus string
+
+// SearchDocumentType defines model for SearchDocumentType.
+type SearchDocumentType string
+
+// SearchMode defines model for SearchMode.
+type SearchMode string
+
+// SearchResponse defines model for SearchResponse.
+type SearchResponse struct {
+	Items []SearchResult `json:"items"`
+	Mode  SearchMode     `json:"mode"`
+}
+
+// SearchResult defines model for SearchResult.
+type SearchResult struct {
+	DocumentType SearchDocumentType `json:"document_type"`
+	EndMs        *int64             `json:"end_ms,omitempty"`
+	EpisodeId    string             `json:"episode_id"`
+	EpisodeTitle string             `json:"episode_title"`
+	Id           string             `json:"id"`
+	PodcastTitle string             `json:"podcast_title"`
+	Score        float64            `json:"score"`
+	Snippet      string             `json:"snippet"`
+	SourceId     string             `json:"source_id"`
+	SpeakerId    *string            `json:"speaker_id,omitempty"`
+	SpeakerName  *string            `json:"speaker_name,omitempty"`
+	StartMs      *int64             `json:"start_ms,omitempty"`
+}
+
+// SearchScope defines model for SearchScope.
+type SearchScope string
 
 // SourceType defines model for SourceType.
 type SourceType string
@@ -515,6 +614,14 @@ type ListEpisodesParams struct {
 	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
+// SearchContentParams defines parameters for SearchContent.
+type SearchContentParams struct {
+	Q         string       `form:"q" json:"q"`
+	Scope     *SearchScope `form:"scope,omitempty" json:"scope,omitempty"`
+	EpisodeId *string      `form:"episode_id,omitempty" json:"episode_id,omitempty"`
+	Limit     *int         `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // GetTranscriptionEventsParams defines parameters for GetTranscriptionEvents.
 type GetTranscriptionEventsParams struct {
 	// LastEventID Return durable events after this event ID.
@@ -541,6 +648,9 @@ type CreateImportJSONRequestBody = CreateImportRequest
 
 // UpdateNoteJSONRequestBody defines body for UpdateNote for application/json ContentType.
 type UpdateNoteJSONRequestBody = UpdateNoteRequest
+
+// ReindexSearchJSONRequestBody defines body for ReindexSearch for application/json ContentType.
+type ReindexSearchJSONRequestBody = ReindexSearchRequest
 
 // MergeTranscriptSpeakersJSONRequestBody defines body for MergeTranscriptSpeakers for application/json ContentType.
 type MergeTranscriptSpeakersJSONRequestBody = MergeTranscriptSpeakersRequest
@@ -586,6 +696,12 @@ type ServerInterface interface {
 	// UpdateNote Update a Note
 	// (PATCH /api/v1/notes/{noteId})
 	UpdateNote(w http.ResponseWriter, r *http.Request, noteId string)
+	// SearchContent Search Notes, Transcript, and indexed AI content
+	// (GET /api/v1/search)
+	SearchContent(w http.ResponseWriter, r *http.Request, params SearchContentParams)
+	// ReindexSearch Enqueue an explicit Search index rebuild
+	// (POST /api/v1/search/reindex)
+	ReindexSearch(w http.ResponseWriter, r *http.Request)
 	// GetTranscription Get transcription workflow state
 	// (GET /api/v1/transcriptions/{runId})
 	GetTranscription(w http.ResponseWriter, r *http.Request, runId string)
@@ -688,6 +804,18 @@ func (_ Unimplemented) DeleteNote(w http.ResponseWriter, r *http.Request, noteId
 // UpdateNote Update a Note
 // (PATCH /api/v1/notes/{noteId})
 func (_ Unimplemented) UpdateNote(w http.ResponseWriter, r *http.Request, noteId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// SearchContent Search Notes, Transcript, and indexed AI content
+// (GET /api/v1/search)
+func (_ Unimplemented) SearchContent(w http.ResponseWriter, r *http.Request, params SearchContentParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ReindexSearch Enqueue an explicit Search index rebuild
+// (POST /api/v1/search/reindex)
+func (_ Unimplemented) ReindexSearch(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1053,6 +1181,92 @@ func (siw *ServerInterfaceWrapper) UpdateNote(w http.ResponseWriter, r *http.Req
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateNote(w, r, noteId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SearchContent operation middleware
+func (siw *ServerInterfaceWrapper) SearchContent(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SearchContentParams
+
+	// ------------- Required query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "scope" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "scope", r.URL.Query(), &params.Scope, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "scope"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "scope", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "episode_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "episode_id", r.URL.Query(), &params.EpisodeId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "episode_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "episode_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SearchContent(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReindexSearch operation middleware
+func (siw *ServerInterfaceWrapper) ReindexSearch(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReindexSearch(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1482,6 +1696,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Patch(options.BaseURL+"/api/v1/notes/{noteId}", wrapper.UpdateNote)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/search", wrapper.SearchContent)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/search/reindex", wrapper.ReindexSearch)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/episodes/{episodeId}/transcriptions", wrapper.CreateTranscription)

@@ -59,6 +59,9 @@ func (r *NotesRepository) CreateForEpisode(
 		if err != nil {
 			return CaptureResult{}, fmt.Errorf("create note: %w", err)
 		}
+		if err := enqueueSearchBuild(ctx, queries, userID, episodeID); err != nil {
+			return CaptureResult{}, err
+		}
 		return CaptureResult{Note: note, Created: true}, nil
 	})
 }
@@ -121,6 +124,9 @@ func (r *NotesRepository) CaptureURL(
 		if err != nil {
 			return CaptureResult{}, fmt.Errorf("create capture note: %w", err)
 		}
+		if err := enqueueSearchBuild(ctx, queries, userID, episode.ID); err != nil {
+			return CaptureResult{}, err
+		}
 		return CaptureResult{Note: note, ImportID: createdImport.ID, Created: true}, nil
 	})
 }
@@ -142,7 +148,16 @@ func (r *NotesRepository) Update(ctx context.Context, userID, noteID pgtype.UUID
 	if !userID.Valid || !noteID.Valid || content == "" {
 		return db.Note{}, errors.New("user, note ID, and content are required")
 	}
-	note, err := db.New(r.pool).UpdateNote(ctx, db.UpdateNoteParams{Content: content, NoteID: noteID, UserID: userID})
+	note, err := withTx(ctx, r.pool, func(queries *db.Queries) (db.Note, error) {
+		note, err := queries.UpdateNote(ctx, db.UpdateNoteParams{Content: content, NoteID: noteID, UserID: userID})
+		if err != nil {
+			return db.Note{}, err
+		}
+		if err := enqueueSearchBuild(ctx, queries, userID, note.EpisodeID); err != nil {
+			return db.Note{}, err
+		}
+		return note, nil
+	})
 	if err != nil {
 		return db.Note{}, fmt.Errorf("update note: %w", err)
 	}
@@ -153,7 +168,17 @@ func (r *NotesRepository) Delete(ctx context.Context, userID, noteID pgtype.UUID
 	if !userID.Valid || !noteID.Valid {
 		return errors.New("user and note ID are required")
 	}
-	if _, err := db.New(r.pool).DeleteNote(ctx, db.DeleteNoteParams{NoteID: noteID, UserID: userID}); err != nil {
+	_, err := withTx(ctx, r.pool, func(queries *db.Queries) (db.Note, error) {
+		note, err := queries.DeleteNote(ctx, db.DeleteNoteParams{NoteID: noteID, UserID: userID})
+		if err != nil {
+			return db.Note{}, err
+		}
+		if err := enqueueSearchBuild(ctx, queries, userID, note.EpisodeID); err != nil {
+			return db.Note{}, err
+		}
+		return note, nil
+	})
+	if err != nil {
 		return fmt.Errorf("delete note: %w", err)
 	}
 	return nil

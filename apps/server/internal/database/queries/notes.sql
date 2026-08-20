@@ -70,7 +70,7 @@ SET deleted_at = COALESCE(deleted_at, now()),
     updated_at = CASE WHEN deleted_at IS NULL THEN now() ELSE updated_at END
 WHERE id = sqlc.arg(note_id)
   AND user_id = sqlc.arg(user_id)
-RETURNING id;
+RETURNING *;
 
 -- name: GetEpisodeForResolve :one
 SELECT id, resolve_status

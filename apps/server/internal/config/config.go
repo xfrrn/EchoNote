@@ -26,6 +26,9 @@ type Config struct {
 	ASRProvider        string
 	ASRAPIKey          string
 	ASREndpoint        string
+	EmbeddingProvider  string
+	EmbeddingAPIKey    string
+	EmbeddingEndpoint  string
 	StorageProvider    string
 	StorageRegion      string
 	StorageEndpoint    string
@@ -47,6 +50,9 @@ func Load() (Config, error) {
 		ASRProvider:        strings.ToLower(strings.TrimSpace(os.Getenv("ASR_PROVIDER"))),
 		ASRAPIKey:          strings.TrimSpace(os.Getenv("ASR_API_KEY")),
 		ASREndpoint:        envOrDefault("ASR_ENDPOINT", "https://dashscope.aliyuncs.com"),
+		EmbeddingProvider:  strings.ToLower(strings.TrimSpace(os.Getenv("EMBEDDING_PROVIDER"))),
+		EmbeddingAPIKey:    strings.TrimSpace(os.Getenv("EMBEDDING_API_KEY")),
+		EmbeddingEndpoint:  envOrDefault("EMBEDDING_ENDPOINT", "https://dashscope.aliyuncs.com"),
 		StorageProvider:    strings.ToLower(strings.TrimSpace(os.Getenv("STORAGE_PROVIDER"))),
 		StorageRegion:      strings.TrimSpace(os.Getenv("STORAGE_REGION")),
 		StorageEndpoint:    strings.TrimSpace(os.Getenv("STORAGE_ENDPOINT")),
@@ -92,6 +98,9 @@ func Load() (Config, error) {
 	if cfg.StorageProvider != "" && cfg.StorageProvider != "aliyun_oss" {
 		return Config{}, fmt.Errorf("STORAGE_PROVIDER must be aliyun_oss")
 	}
+	if cfg.EmbeddingProvider != "" && cfg.EmbeddingProvider != "aliyun" {
+		return Config{}, fmt.Errorf("EMBEDDING_PROVIDER must be aliyun")
+	}
 	if cfg.StorageEndpoint != "" {
 		endpoint, parseErr := url.Parse(cfg.StorageEndpoint)
 		if parseErr != nil || endpoint.Scheme != "https" || endpoint.Host == "" || endpoint.User != nil {
@@ -102,6 +111,12 @@ func Load() (Config, error) {
 		endpoint, parseErr := url.Parse(cfg.ASREndpoint)
 		if parseErr != nil || endpoint.Scheme != "https" || endpoint.Host == "" || endpoint.User != nil {
 			return Config{}, fmt.Errorf("ASR_ENDPOINT must be an HTTPS URL without credentials")
+		}
+	}
+	if cfg.EmbeddingProvider != "" {
+		endpoint, parseErr := url.Parse(cfg.EmbeddingEndpoint)
+		if parseErr != nil || endpoint.Scheme != "https" || endpoint.Host == "" || endpoint.User != nil {
+			return Config{}, fmt.Errorf("EMBEDDING_ENDPOINT must be an HTTPS URL without credentials")
 		}
 	}
 
@@ -129,6 +144,24 @@ func (cfg Config) ValidateTranscription() error {
 
 func (cfg Config) TranscriptionEnabled() bool {
 	return cfg.ValidateTranscription() == nil
+}
+
+func (cfg Config) ValidateEmbedding() error {
+	missing := make([]string, 0, 2)
+	if cfg.EmbeddingProvider == "" {
+		missing = append(missing, "EMBEDDING_PROVIDER")
+	}
+	if cfg.EmbeddingAPIKey == "" {
+		missing = append(missing, "EMBEDDING_API_KEY")
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("semantic search requires %s", strings.Join(missing, ", "))
+	}
+	return nil
+}
+
+func (cfg Config) EmbeddingEnabled() bool {
+	return cfg.ValidateEmbedding() == nil
 }
 
 func envOrDefault(key, fallback string) string {

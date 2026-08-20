@@ -16,6 +16,7 @@ import (
 
 	"github.com/Actify/echonote/apps/server/internal/database/db"
 	"github.com/Actify/echonote/apps/server/internal/repository"
+	"github.com/Actify/echonote/apps/server/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5"
@@ -32,6 +33,7 @@ type Server struct {
 	library              *repository.LibraryRepository
 	notes                *repository.NotesRepository
 	transcriptions       *repository.TranscriptionRepository
+	searches             *service.SearchService
 	transcriptionEnabled bool
 	userID               pgtype.UUID
 	logger               *slog.Logger
@@ -45,6 +47,7 @@ func NewRouter(
 	library *repository.LibraryRepository,
 	notes *repository.NotesRepository,
 	transcriptions *repository.TranscriptionRepository,
+	searches *service.SearchService,
 	transcriptionEnabled bool,
 	userID pgtype.UUID,
 	logger *slog.Logger,
@@ -55,7 +58,7 @@ func NewRouter(
 	router.Use(recoverer(logger))
 	return HandlerFromMux(&Server{
 		database: database, imports: imports, library: library, notes: notes,
-		transcriptions: transcriptions, transcriptionEnabled: transcriptionEnabled,
+		transcriptions: transcriptions, searches: searches, transcriptionEnabled: transcriptionEnabled,
 		userID: userID, logger: logger,
 	}, router)
 }

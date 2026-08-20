@@ -203,6 +203,11 @@ func (r *ImportRepository) SaveResolved(
 		if err := queries.SetImportEpisode(ctx, db.SetImportEpisodeParams{EpisodeID: episodeID, ImportID: importID, UserID: userID}); err != nil {
 			return pgtype.UUID{}, fmt.Errorf("complete import: %w", err)
 		}
+		if captureEpisodeID.Valid {
+			if err := enqueueSearchBuild(ctx, queries, userID, episodeID); err != nil {
+				return pgtype.UUID{}, err
+			}
+		}
 		return episodeID, nil
 	})
 }

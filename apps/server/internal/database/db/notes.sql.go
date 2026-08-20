@@ -102,7 +102,7 @@ SET deleted_at = COALESCE(deleted_at, now()),
     updated_at = CASE WHEN deleted_at IS NULL THEN now() ELSE updated_at END
 WHERE id = $1
   AND user_id = $2
-RETURNING id
+RETURNING id, user_id, episode_id, client_note_id, content, created_at, updated_at, deleted_at
 `
 
 type DeleteNoteParams struct {
@@ -110,11 +110,20 @@ type DeleteNoteParams struct {
 	UserID pgtype.UUID `json:"user_id"`
 }
 
-func (q *Queries) DeleteNote(ctx context.Context, arg DeleteNoteParams) (pgtype.UUID, error) {
+func (q *Queries) DeleteNote(ctx context.Context, arg DeleteNoteParams) (Note, error) {
 	row := q.db.QueryRow(ctx, deleteNote, arg.NoteID, arg.UserID)
-	var id pgtype.UUID
-	err := row.Scan(&id)
-	return id, err
+	var i Note
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.EpisodeID,
+		&i.ClientNoteID,
+		&i.Content,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
 }
 
 const deletePendingEpisode = `-- name: DeletePendingEpisode :exec
