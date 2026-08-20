@@ -305,6 +305,7 @@ SELECT
     import_record.id,
     import_record.submitted_url,
     import_record.episode_id,
+    episode.resolve_status AS episode_resolve_status,
     job.status,
     job.stage,
     job.error_code,
@@ -313,6 +314,9 @@ SELECT
     GREATEST(import_record.updated_at, job.updated_at)::timestamptz AS updated_at
 FROM imports AS import_record
 JOIN jobs AS job ON job.id = import_record.job_id
+LEFT JOIN episodes AS episode
+  ON episode.id = import_record.episode_id
+ AND episode.user_id = import_record.user_id
 WHERE import_record.id = $1
   AND import_record.user_id = $2
 `
@@ -323,15 +327,16 @@ type GetImportStatusParams struct {
 }
 
 type GetImportStatusRow struct {
-	ID           pgtype.UUID        `json:"id"`
-	SubmittedUrl string             `json:"submitted_url"`
-	EpisodeID    pgtype.UUID        `json:"episode_id"`
-	Status       string             `json:"status"`
-	Stage        string             `json:"stage"`
-	ErrorCode    *string            `json:"error_code"`
-	ErrorMessage *string            `json:"error_message"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	ID                   pgtype.UUID        `json:"id"`
+	SubmittedUrl         string             `json:"submitted_url"`
+	EpisodeID            pgtype.UUID        `json:"episode_id"`
+	EpisodeResolveStatus *string            `json:"episode_resolve_status"`
+	Status               string             `json:"status"`
+	Stage                string             `json:"stage"`
+	ErrorCode            *string            `json:"error_code"`
+	ErrorMessage         *string            `json:"error_message"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (q *Queries) GetImportStatus(ctx context.Context, arg GetImportStatusParams) (GetImportStatusRow, error) {
@@ -341,6 +346,7 @@ func (q *Queries) GetImportStatus(ctx context.Context, arg GetImportStatusParams
 		&i.ID,
 		&i.SubmittedUrl,
 		&i.EpisodeID,
+		&i.EpisodeResolveStatus,
 		&i.Status,
 		&i.Stage,
 		&i.ErrorCode,

@@ -92,6 +92,8 @@ Worker 解析 URL 后：
 - 没有命中已有身份键：直接补全原 Pending Episode，Episode ID 不变。
 - 命中已有 Episode：把 Pending Episode 下的 Note 移到已有 Episode，删除空的 Pending Episode，并让 Import 指向最终 Episode。
 
+Import Handler 只有在关联 Episode 的 `resolve_status=completed` 时才跳过 Resolver；仅存在 Pending `episode_id` 不代表解析完成。该区分避免 URL Capture 的 Job 被误判为幂等重放而直接成功。
+
 这保留了 Phase 2 的跨来源去重，不会因为“先记后导入”产生永久重复单集。
 
 如果用户在解析前永久删除 Pending Episode，Library 删除事务会取消关联的 `queued/running` Import Job。Worker 即使已经领取任务也不能在之后恢复已删除 Episode；Import/Job 审计记录保留。
@@ -145,6 +147,7 @@ PostgreSQL 自动化测试覆盖：
 
 - 同一 `client_note_id` 并发创建只落一条 Note
 - URL Capture 的 Episode、Import、Job、Note 原子创建
+- Import Handler 会处理 Pending Capture，并只跳过已完成 Episode
 - Pending Episode 原地补全与命中已有 Episode 后的 Note 迁移
 - 删除 Pending Episode 后取消 Job，解析不会复活数据
 - Note 查询、编辑、重复软删除与真实 `note_count`

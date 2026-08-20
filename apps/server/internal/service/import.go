@@ -18,7 +18,7 @@ func NewResolveImportHandler(imports *repository.ImportRepository, resolver doma
 		if err != nil {
 			return err
 		}
-		if status.EpisodeID.Valid {
+		if status.EpisodeResolveStatus != nil && *status.EpisodeResolveStatus == "completed" {
 			return nil
 		}
 		resolved, err := resolver.Resolve(ctx, status.SubmittedUrl)

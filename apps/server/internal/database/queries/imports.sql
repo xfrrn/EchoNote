@@ -15,6 +15,7 @@ SELECT
     import_record.id,
     import_record.submitted_url,
     import_record.episode_id,
+    episode.resolve_status AS episode_resolve_status,
     job.status,
     job.stage,
     job.error_code,
@@ -23,6 +24,9 @@ SELECT
     GREATEST(import_record.updated_at, job.updated_at)::timestamptz AS updated_at
 FROM imports AS import_record
 JOIN jobs AS job ON job.id = import_record.job_id
+LEFT JOIN episodes AS episode
+  ON episode.id = import_record.episode_id
+ AND episode.user_id = import_record.user_id
 WHERE import_record.id = sqlc.arg(import_id)
   AND import_record.user_id = sqlc.arg(user_id);
 
