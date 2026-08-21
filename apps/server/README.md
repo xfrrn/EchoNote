@@ -20,12 +20,11 @@ ECHONOTE_USER_ID=00000000-0000-4000-8000-000000000001
 在 `apps/server` 下依次执行：
 
 ```bash
-go run ./cmd/migrate up
 go run ./cmd/api
 go run ./cmd/worker
 ```
 
-API 和 Worker 是独立进程。Worker 处理 `resolve_episode`、转录状态机、Search 索引、Embedding 与按需 AI Artifact，同时续租并回收超时任务。`ECHONOTE_USER_ID` 只为 development / test 保留；staging / production 必须使用真实 Session，否则配置校验拒绝启动。
+API 和 Worker 会在连接 PostgreSQL 时自动检查并补齐 Schema，不需要单独执行 Migration 命令；首次初始化使用的数据库账号需要有目标 Schema 的建表权限。两个服务是独立进程，内置数据库锁会避免并发初始化。Worker 处理 `resolve_episode`、转录状态机、Search 索引、Embedding 与按需 AI Artifact，同时续租并回收超时任务。`ECHONOTE_USER_ID` 只为 development / test 保留；staging / production 必须使用真实 Session，否则配置校验拒绝启动。
 
 未配置 ASR / Object Storage 时，已有 Import、Library、Notes 与 Transcript 读取仍可运行；新建和重试转录返回 503，Worker 只注册已有业务 Job。启用转录至少需要：
 
@@ -192,11 +191,12 @@ POST /api/v1/episodes/{episode_id}/exports
 
 Export 是无状态同步操作，不创建数据库记录、Job 或对象存储文件。只读取 ready AI Artifact 和 active Transcript，并在同一个只读一致性快照中生成；任一输出超过 4 MiB 会明确返回 413，不静默截断。
 
-## Migration 与代码生成
+## Schema 与代码生成
+
+API 和 Worker 启动时会自动应用内嵌的 Schema 更新。以下命令仅用于检查版本或受控回滚，不是启动步骤：
 
 ```bash
 go run ./cmd/migrate version
-go run ./cmd/migrate up
 go run ./cmd/migrate down 1
 go generate ./...
 ```
@@ -214,6 +214,12 @@ PostgreSQL 集成测试默认跳过。显式提供隔离的测试数据库后会
 
 ```text
 ECHONOTE_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/echonote_test?sslmode=disable
+```
+
+自动初始化集成测试使用可清空的独立数据库：
+
+```text
+ECHONOTE_SCHEMA_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/echonote_schema_test?sslmode=disable
 ```
 
 测试使用随机用户 ID，并只清理自己创建的业务数据与 Job。

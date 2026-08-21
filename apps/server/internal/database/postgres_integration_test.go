@@ -8,6 +8,52 @@ import (
 	"time"
 )
 
+func TestOpenApplicationInitializesEmptyDatabase(t *testing.T) {
+	databaseURL := os.Getenv("ECHONOTE_SCHEMA_TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("set ECHONOTE_SCHEMA_TEST_DATABASE_URL to run the schema initialization test")
+	}
+	version, dirty, err := MigrationVersion(databaseURL)
+	if err != nil || dirty {
+		t.Fatalf("migration version=%d dirty=%t err=%v", version, dirty, err)
+	}
+	if version > 0 {
+		if err := MigrateDown(databaseURL, int(version)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Cleanup(func() {
+		if err := MigrateUp(databaseURL); err != nil {
+			t.Errorf("restore schema: %v", err)
+		}
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	pool, err := OpenApplication(ctx, databaseURL, "echonote-schema-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+
+	var tables int
+	if err := pool.QueryRow(ctx, `
+SELECT count(*)
+FROM pg_catalog.pg_tables
+WHERE schemaname = 'public'
+  AND tablename = ANY($1::text[])
+`, []string{
+		"jobs", "job_events", "podcasts", "episodes", "episode_sources", "episode_identity_keys", "imports", "notes",
+		"transcription_runs", "transcription_chunks", "transcription_events", "transcript_versions", "transcript_speakers", "transcript_segments",
+		"search_documents", "search_chunks", "ai_artifacts", "conversations", "messages", "message_citations", "users", "sessions",
+	}).Scan(&tables); err != nil {
+		t.Fatal(err)
+	}
+	if tables != 22 {
+		t.Fatalf("initialized tables=%d, want 22", tables)
+	}
+}
+
 func TestValidateRuntimeRoleRejectsSuperuser(t *testing.T) {
 	databaseURL := os.Getenv("ECHONOTE_TEST_DATABASE_URL")
 	if databaseURL == "" {

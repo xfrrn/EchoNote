@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -24,6 +25,16 @@ func Open(ctx context.Context, databaseURL, applicationName string) (*pgxpool.Po
 		return nil, fmt.Errorf("ping PostgreSQL: %w", err)
 	}
 	return pool, nil
+}
+
+// OpenApplication applies pending schema changes before opening an application pool.
+func OpenApplication(ctx context.Context, databaseURL, applicationName string) (*pgxpool.Pool, error) {
+	if err := MigrateUp(databaseURL); err != nil {
+		return nil, fmt.Errorf("initialize PostgreSQL schema: %w", err)
+	}
+	connectContext, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	return Open(connectContext, databaseURL, applicationName)
 }
 
 func ValidateRuntimeRole(ctx context.Context, pool *pgxpool.Pool, expectedDatabase string) error {

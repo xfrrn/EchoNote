@@ -59,9 +59,7 @@ func run(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	connectContext, cancelConnect := context.WithTimeout(ctx, 5*time.Second)
-	pool, err := database.Open(connectContext, cfg.DatabaseURL, "echonote-worker")
-	cancelConnect()
+	pool, err := database.OpenApplication(ctx, cfg.DatabaseURL, "echonote-worker")
 	if err != nil {
 		return err
 	}
