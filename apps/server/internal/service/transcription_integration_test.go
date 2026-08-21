@@ -40,6 +40,7 @@ func TestTranscriptionWorkflowCompletesLongAudioWithSwappedSpeakers(t *testing.T
 	}
 	defer pool.Close()
 	userID := randomServiceUUID(t)
+	defer ensureTestUsers(t, pool, userID)()
 	defer func() {
 		_, _ = pool.Exec(context.Background(), "DELETE FROM imports WHERE user_id = $1", userID)
 		_, _ = pool.Exec(context.Background(), "DELETE FROM jobs WHERE user_id = $1", userID)

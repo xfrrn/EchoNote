@@ -14,6 +14,8 @@ func TestLoad(t *testing.T) {
 	t.Setenv("WORKER_POLL_INTERVAL", "250ms")
 	t.Setenv("WORKER_LEASE_TIMEOUT", "2m")
 	t.Setenv("ASR_POLL_INTERVAL", "3s")
+	t.Setenv("SESSION_TTL", "24h")
+	t.Setenv("PASSWORD_BCRYPT_COST", "11")
 	t.Setenv("ECHONOTE_USER_ID", "fb48ddae-0ac8-4fb3-9e1a-f293ff938ed2")
 
 	cfg, err := Load()
@@ -29,13 +31,16 @@ func TestLoad(t *testing.T) {
 	if cfg.ASRPollInterval != 3*time.Second || cfg.FFmpegPath != "ffmpeg" || cfg.FFprobePath != "ffprobe" {
 		t.Fatalf("unexpected transcription defaults: %+v", cfg)
 	}
+	if cfg.SessionTTL != 24*time.Hour || cfg.PasswordBcryptCost != 11 {
+		t.Fatalf("unexpected auth config: %+v", cfg)
+	}
 	if cfg.EmbeddingEndpoint != "https://dashscope.aliyuncs.com" {
 		t.Fatalf("unexpected embedding endpoint: %q", cfg.EmbeddingEndpoint)
 	}
 	if cfg.LLMEndpoint != "https://dashscope.aliyuncs.com/compatible-mode/v1" || cfg.LLMModel != "qwen-plus" {
 		t.Fatalf("unexpected LLM defaults: endpoint=%q model=%q", cfg.LLMEndpoint, cfg.LLMModel)
 	}
-	if !cfg.UserID.Valid {
+	if !cfg.DevelopmentUserID.Valid {
 		t.Fatal("expected ECHONOTE_USER_ID to be parsed")
 	}
 }
@@ -89,6 +94,26 @@ func TestLoadRejectsInvalidUserID(t *testing.T) {
 	t.Setenv("ECHONOTE_USER_ID", "not-a-uuid")
 	if _, err := Load(); err == nil {
 		t.Fatal("expected invalid ECHONOTE_USER_ID to fail")
+	}
+}
+
+func TestLoadRejectsProductionDevelopmentIdentity(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://localhost/echonote?sslmode=verify-full")
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("PUBLIC_ORIGIN", "https://notes.example.com")
+	t.Setenv("ECHONOTE_USER_ID", "fb48ddae-0ac8-4fb3-9e1a-f293ff938ed2")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected production ECHONOTE_USER_ID to fail")
+	}
+}
+
+func TestLoadRequiresSecureProductionOrigin(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://localhost/echonote?sslmode=verify-full")
+	t.Setenv("APP_ENV", "staging")
+	t.Setenv("ECHONOTE_USER_ID", "")
+	t.Setenv("PUBLIC_ORIGIN", "http://notes.example.com")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected insecure staging PUBLIC_ORIGIN to fail")
 	}
 }
 

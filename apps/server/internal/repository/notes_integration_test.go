@@ -29,6 +29,7 @@ func TestNotesLifecycleAndCaptureIdempotency(t *testing.T) {
 	}
 	defer pool.Close()
 	userID, otherUserID := randomUUID(t), randomUUID(t)
+	defer ensureTestUsers(t, pool, userID, otherUserID)()
 	defer func() {
 		_, _ = pool.Exec(context.Background(), "DELETE FROM imports WHERE user_id IN ($1, $2)", userID, otherUserID)
 		_, _ = pool.Exec(context.Background(), "DELETE FROM jobs WHERE user_id IN ($1, $2)", userID, otherUserID)

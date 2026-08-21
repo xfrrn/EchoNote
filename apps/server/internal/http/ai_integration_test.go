@@ -68,6 +68,7 @@ func TestAIArtifactAndConversationHTTP(t *testing.T) {
 	}
 	defer pool.Close()
 	userID, otherUserID := randomHTTPUUID(t), randomHTTPUUID(t)
+	defer ensureTestUsers(t, pool, userID, otherUserID)()
 	defer func() {
 		_, _ = pool.Exec(context.Background(), "DELETE FROM imports WHERE user_id IN ($1, $2)", userID, otherUserID)
 		_, _ = pool.Exec(context.Background(), "DELETE FROM jobs WHERE user_id IN ($1, $2)", userID, otherUserID)
@@ -104,7 +105,7 @@ func TestAIArtifactAndConversationHTTP(t *testing.T) {
 	searchService := service.NewSearchService(searchRepository, nil)
 	aiService := service.NewAIService(aiRepository, searchService, provider)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	router := NewRouter(pool, imports, repository.NewLibraryRepository(pool), notes, nil, searchService, aiService, nil, false, userID, logger)
+	router := NewRouter(pool, imports, repository.NewLibraryRepository(pool), notes, nil, searchService, aiService, nil, nil, false, developmentAuth(userID), logger)
 
 	artifactPath := "/api/v1/episodes/" + formatUUID(episodeID) + "/ai/artifacts"
 	response := serveAIRequest(router, http.MethodPost, artifactPath, "")
@@ -114,7 +115,9 @@ func TestAIArtifactAndConversationHTTP(t *testing.T) {
 	queue := repository.NewJobQueue(pool)
 	job, found, err := queue.Claim(ctx, "ai-test-worker", []string{repository.GenerateAIArtifactJobType})
 	if err != nil || !found {
-		t.Fatalf("claim artifact job found=%t err=%v", found, err)
+		var jobs string
+		_ = pool.QueryRow(ctx, "SELECT COALESCE(string_agg(type || ':' || status || ':' || (run_after - now())::text, ','), '') FROM jobs WHERE user_id = $1", userID).Scan(&jobs)
+		t.Fatalf("claim artifact job found=%t err=%v jobs=%s", found, err, jobs)
 	}
 	if err := service.NewAIWorkflow(aiRepository, provider).Handlers()[repository.GenerateAIArtifactJobType](ctx, job); err != nil {
 		t.Fatal(err)
@@ -200,7 +203,7 @@ func TestAIArtifactAndConversationHTTP(t *testing.T) {
 		t.Fatalf("conversation history=%+v err=%v", history, err)
 	}
 
-	otherRouter := NewRouter(pool, nil, nil, nil, nil, nil, aiService, nil, false, otherUserID, logger)
+	otherRouter := NewRouter(pool, nil, nil, nil, nil, nil, aiService, nil, nil, false, developmentAuth(otherUserID), logger)
 	response = serveAIRequest(otherRouter, http.MethodGet, "/api/v1/conversations/"+conversation.Id, "")
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("conversation isolation status=%d body=%s", response.Code, response.Body.String())

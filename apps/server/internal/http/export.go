@@ -36,7 +36,7 @@ func (s *Server) CreateEpisodeExport(w http.ResponseWriter, r *http.Request, epi
 		IncludeWorthReviewing: exportBool(request.IncludeWorthReviewing, organized),
 		IncludeTranscript:     exportBool(request.IncludeTranscript, false),
 	}
-	result, err := s.exports.Export(r.Context(), s.userID, parsedEpisodeID, service.ExportRequest{Options: options, SegmentIDs: segmentIDs})
+	result, err := s.exports.Export(r.Context(), requestUserID(r), parsedEpisodeID, service.ExportRequest{Options: options, SegmentIDs: segmentIDs})
 	switch {
 	case errors.Is(err, exportdomain.ErrInvalidOptions):
 		writeAPIError(w, http.StatusBadRequest, "INVALID_EXPORT_OPTIONS", "export mode and options are inconsistent")
@@ -61,7 +61,7 @@ func (s *Server) CreateEpisodeExport(w http.ResponseWriter, r *http.Request, epi
 		return
 	case err != nil:
 		s.logger.ErrorContext(r.Context(), "create Episode export",
-			"request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(s.userID), "error", err,
+			"request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(requestUserID(r)), "error", err,
 		)
 		writeAPIError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
 		return

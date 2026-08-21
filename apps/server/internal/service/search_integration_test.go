@@ -60,6 +60,7 @@ func TestSearchIndexKeywordEmbeddingAndHybrid(t *testing.T) {
 	}
 	defer pool.Close()
 	userID, otherUserID := randomServiceUUID(t), randomServiceUUID(t)
+	defer ensureTestUsers(t, pool, userID, otherUserID)()
 	defer func() {
 		_, _ = pool.Exec(context.Background(), "DELETE FROM imports WHERE user_id IN ($1, $2)", userID, otherUserID)
 		_, _ = pool.Exec(context.Background(), "DELETE FROM jobs WHERE user_id IN ($1, $2)", userID, otherUserID)
@@ -138,7 +139,9 @@ func TestSearchIndexKeywordEmbeddingAndHybrid(t *testing.T) {
 	for range 2 {
 		job, found, err := queue.Claim(ctx, "search-test-worker", []string{repository.GenerateEmbeddingsJobType})
 		if err != nil || !found {
-			t.Fatalf("claim found=%t err=%v", found, err)
+			var jobs string
+			_ = pool.QueryRow(ctx, "SELECT COALESCE(string_agg(type || ':' || status || ':' || (run_after - now())::text, ','), '') FROM jobs WHERE user_id = $1", userID).Scan(&jobs)
+			t.Fatalf("claim found=%t err=%v jobs=%s", found, err, jobs)
 		}
 		if err := embedHandler(ctx, job); err != nil {
 			t.Fatal(err)

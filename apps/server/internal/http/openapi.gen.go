@@ -695,6 +695,18 @@ type ImportResponse struct {
 // ImportResponseStatus defines model for ImportResponse.Status.
 type ImportResponseStatus string
 
+// LoginRequest defines model for LoginRequest.
+type LoginRequest struct {
+	Password string `json:"password"`
+	Username string `json:"username"`
+}
+
+// LoginResponse defines model for LoginResponse.
+type LoginResponse struct {
+	ExpiresAt time.Time    `json:"expires_at"`
+	User      UserResponse `json:"user"`
+}
+
 // MergeTranscriptSpeakersRequest defines model for MergeTranscriptSpeakersRequest.
 type MergeTranscriptSpeakersRequest struct {
 	SourceSpeakerId string `json:"source_speaker_id"`
@@ -899,11 +911,20 @@ type UpdateTranscriptSpeakerRequest struct {
 	Role        *string `json:"role,omitempty"`
 }
 
+// UserResponse defines model for UserResponse.
+type UserResponse struct {
+	Id       string `json:"id"`
+	Username string `json:"username"`
+}
+
 // BadRequest defines model for BadRequest.
 type BadRequest = ErrorResponse
 
 // Conflict defines model for Conflict.
 type Conflict = ErrorResponse
+
+// Forbidden defines model for Forbidden.
+type Forbidden = ErrorResponse
 
 // InternalError defines model for InternalError.
 type InternalError = ErrorResponse
@@ -916,6 +937,9 @@ type PayloadTooLarge = ErrorResponse
 
 // ServiceUnavailable defines model for ServiceUnavailable.
 type ServiceUnavailable = ErrorResponse
+
+// Unauthorized defines model for Unauthorized.
+type Unauthorized = ErrorResponse
 
 // ListEpisodesParams defines parameters for ListEpisodes.
 type ListEpisodesParams struct {
@@ -942,6 +966,9 @@ type ListTranscriptSegmentsParams struct {
 	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
 	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
 }
+
+// LoginJSONRequestBody defines body for Login for application/json ContentType.
+type LoginJSONRequestBody = LoginRequest
 
 // CreateCaptureJSONRequestBody defines body for CreateCapture for application/json ContentType.
 type CreateCaptureJSONRequestBody = CreateCaptureRequest
@@ -978,6 +1005,12 @@ type UpdateTranscriptSpeakerJSONRequestBody = UpdateTranscriptSpeakerRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// Login Create a server-side session
+	// (POST /api/v1/auth/login)
+	Login(w http.ResponseWriter, r *http.Request)
+	// Logout Revoke the current session
+	// (POST /api/v1/auth/logout)
+	Logout(w http.ResponseWriter, r *http.Request)
 	// CreateCapture Capture a note for an Episode or URL
 	// (POST /api/v1/captures)
 	CreateCapture(w http.ResponseWriter, r *http.Request)
@@ -1026,6 +1059,9 @@ type ServerInterface interface {
 	// GetImport Get an import result
 	// (GET /api/v1/imports/{importId})
 	GetImport(w http.ResponseWriter, r *http.Request, importId string)
+	// GetCurrentUser Get the authenticated user
+	// (GET /api/v1/me)
+	GetCurrentUser(w http.ResponseWriter, r *http.Request)
 	// DeleteNote Soft-delete a Note
 	// (DELETE /api/v1/notes/{noteId})
 	DeleteNote(w http.ResponseWriter, r *http.Request, noteId string)
@@ -1070,6 +1106,18 @@ type ServerInterface interface {
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
+
+// Login Create a server-side session
+// (POST /api/v1/auth/login)
+func (_ Unimplemented) Login(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Logout Revoke the current session
+// (POST /api/v1/auth/logout)
+func (_ Unimplemented) Logout(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
 
 // CreateCapture Capture a note for an Episode or URL
 // (POST /api/v1/captures)
@@ -1167,6 +1215,12 @@ func (_ Unimplemented) GetImport(w http.ResponseWriter, r *http.Request, importI
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// GetCurrentUser Get the authenticated user
+// (GET /api/v1/me)
+func (_ Unimplemented) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // DeleteNote Soft-delete a Note
 // (DELETE /api/v1/notes/{noteId})
 func (_ Unimplemented) DeleteNote(w http.ResponseWriter, r *http.Request, noteId string) {
@@ -1253,6 +1307,34 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// Login operation middleware
+func (siw *ServerInterfaceWrapper) Login(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.Login(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// Logout operation middleware
+func (siw *ServerInterfaceWrapper) Logout(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.Logout(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // CreateCapture operation middleware
 func (siw *ServerInterfaceWrapper) CreateCapture(w http.ResponseWriter, r *http.Request) {
@@ -1645,6 +1727,20 @@ func (siw *ServerInterfaceWrapper) GetImport(w http.ResponseWriter, r *http.Requ
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetImport(w, r, importId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetCurrentUser operation middleware
+func (siw *ServerInterfaceWrapper) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCurrentUser(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2182,6 +2278,15 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/readyz", wrapper.GetReadiness)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/auth/login", wrapper.Login)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/auth/logout", wrapper.Logout)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/me", wrapper.GetCurrentUser)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/imports", wrapper.CreateImport)

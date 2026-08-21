@@ -36,6 +36,7 @@ func TestTranscriptionHTTPFlow(t *testing.T) {
 	}
 	defer pool.Close()
 	userID := randomHTTPUUID(t)
+	defer ensureTestUsers(t, pool, userID)()
 	defer func() {
 		_, _ = pool.Exec(context.Background(), "DELETE FROM imports WHERE user_id = $1", userID)
 		_, _ = pool.Exec(context.Background(), "DELETE FROM jobs WHERE user_id = $1", userID)
@@ -58,7 +59,7 @@ func TestTranscriptionHTTPFlow(t *testing.T) {
 	transcriptions := repository.NewTranscriptionRepository(pool)
 	router := NewRouter(
 		pool, imports, repository.NewLibraryRepository(pool), repository.NewNotesRepository(pool),
-		transcriptions, nil, nil, nil, true, userID, slog.New(slog.NewTextHandler(io.Discard, nil)),
+		transcriptions, nil, nil, nil, nil, true, developmentAuth(userID), slog.New(slog.NewTextHandler(io.Discard, nil)),
 	)
 
 	path := "/api/v1/episodes/" + formatUUID(episodeID) + "/transcriptions"

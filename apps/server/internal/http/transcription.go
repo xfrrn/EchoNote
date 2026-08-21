@@ -42,7 +42,7 @@ func (s *Server) CreateTranscription(w http.ResponseWriter, r *http.Request, epi
 		writeAPIError(w, http.StatusServiceUnavailable, "TRANSCRIPTION_DISABLED", "transcription providers are not configured")
 		return
 	}
-	run, err := s.transcriptions.Create(r.Context(), s.userID, parsedEpisodeID, string(request.Profile), config)
+	run, err := s.transcriptions.Create(r.Context(), requestUserID(r), parsedEpisodeID, string(request.Profile), config)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		writeAPIError(w, http.StatusNotFound, "EPISODE_NOT_FOUND", "episode was not found")
@@ -64,7 +64,7 @@ func (s *Server) GetTranscription(w http.ResponseWriter, r *http.Request, runID 
 		writeAPIError(w, http.StatusBadRequest, "INVALID_TRANSCRIPTION_ID", "runId must be a UUID")
 		return
 	}
-	run, err := s.transcriptions.Get(r.Context(), s.userID, parsedRunID)
+	run, err := s.transcriptions.Get(r.Context(), requestUserID(r), parsedRunID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeAPIError(w, http.StatusNotFound, "TRANSCRIPTION_NOT_FOUND", "transcription was not found")
 		return
@@ -87,7 +87,7 @@ func (s *Server) RetryTranscription(w http.ResponseWriter, r *http.Request, runI
 		writeAPIError(w, http.StatusServiceUnavailable, "TRANSCRIPTION_DISABLED", "transcription providers are not configured")
 		return
 	}
-	run, err := s.transcriptions.Retry(r.Context(), s.userID, parsedRunID)
+	run, err := s.transcriptions.Retry(r.Context(), requestUserID(r), parsedRunID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		writeAPIError(w, http.StatusNotFound, "TRANSCRIPTION_NOT_FOUND", "transcription was not found")
@@ -109,7 +109,7 @@ func (s *Server) CancelTranscription(w http.ResponseWriter, r *http.Request, run
 		writeAPIError(w, http.StatusBadRequest, "INVALID_TRANSCRIPTION_ID", "runId must be a UUID")
 		return
 	}
-	run, err := s.transcriptions.Cancel(r.Context(), s.userID, parsedRunID)
+	run, err := s.transcriptions.Cancel(r.Context(), requestUserID(r), parsedRunID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeAPIError(w, http.StatusNotFound, "TRANSCRIPTION_NOT_FOUND", "transcription was not found")
 		return
@@ -136,7 +136,7 @@ func (s *Server) GetTranscriptionEvents(w http.ResponseWriter, r *http.Request, 
 			return
 		}
 	}
-	run, err := s.transcriptions.Get(r.Context(), s.userID, parsedRunID)
+	run, err := s.transcriptions.Get(r.Context(), requestUserID(r), parsedRunID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeAPIError(w, http.StatusNotFound, "TRANSCRIPTION_NOT_FOUND", "transcription was not found")
 		return
@@ -161,7 +161,7 @@ func (s *Server) GetTranscriptionEvents(w http.ResponseWriter, r *http.Request, 
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
-		events, listErr := s.transcriptions.Events(r.Context(), s.userID, parsedRunID, afterID)
+		events, listErr := s.transcriptions.Events(r.Context(), requestUserID(r), parsedRunID, afterID)
 		if listErr != nil {
 			s.logTranscriptionError(r, "stream transcription events", runID, listErr)
 			return
@@ -183,7 +183,7 @@ func (s *Server) GetTranscriptionEvents(w http.ResponseWriter, r *http.Request, 
 		case <-r.Context().Done():
 			return
 		case <-ticker.C:
-			run, err = s.transcriptions.Get(r.Context(), s.userID, parsedRunID)
+			run, err = s.transcriptions.Get(r.Context(), requestUserID(r), parsedRunID)
 			if err != nil {
 				s.logTranscriptionError(r, "refresh transcription events", runID, err)
 				return
@@ -198,7 +198,7 @@ func (s *Server) GetEpisodeTranscript(w http.ResponseWriter, r *http.Request, ep
 		writeAPIError(w, http.StatusBadRequest, "INVALID_EPISODE_ID", "episodeId must be a UUID")
 		return
 	}
-	active, err := s.transcriptions.ActiveTranscript(r.Context(), s.userID, parsedEpisodeID)
+	active, err := s.transcriptions.ActiveTranscript(r.Context(), requestUserID(r), parsedEpisodeID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeAPIError(w, http.StatusNotFound, "TRANSCRIPT_NOT_FOUND", "episode has no active transcript")
 		return
@@ -228,7 +228,7 @@ func (s *Server) ListTranscriptSegments(w http.ResponseWriter, r *http.Request, 
 		writeAPIError(w, http.StatusBadRequest, "INVALID_PAGINATION", "limit must be 1-500 and offset must be non-negative")
 		return
 	}
-	segments, total, err := s.transcriptions.Segments(r.Context(), s.userID, parsedTranscriptID, int32(limit), int32(offset))
+	segments, total, err := s.transcriptions.Segments(r.Context(), requestUserID(r), parsedTranscriptID, int32(limit), int32(offset))
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeAPIError(w, http.StatusNotFound, "TRANSCRIPT_NOT_FOUND", "transcript was not found")
 		return
@@ -262,7 +262,7 @@ func (s *Server) UpdateTranscriptSpeaker(w http.ResponseWriter, r *http.Request,
 		writeAPIError(w, http.StatusBadRequest, "INVALID_SPEAKER", "display_name or role is invalid")
 		return
 	}
-	speaker, err := s.transcriptions.RenameSpeaker(r.Context(), s.userID, parsedTranscriptID, parsedSpeakerID, displayName, role)
+	speaker, err := s.transcriptions.RenameSpeaker(r.Context(), requestUserID(r), parsedTranscriptID, parsedSpeakerID, displayName, role)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeAPIError(w, http.StatusNotFound, "SPEAKER_NOT_FOUND", "speaker was not found")
 		return
@@ -292,7 +292,7 @@ func (s *Server) MergeTranscriptSpeakers(w http.ResponseWriter, r *http.Request,
 		writeAPIError(w, http.StatusBadRequest, "INVALID_SPEAKER_MERGE", "source and target must be different speaker UUIDs")
 		return
 	}
-	target, err := s.transcriptions.MergeSpeakers(r.Context(), s.userID, parsedTranscriptID, sourceID, targetID)
+	target, err := s.transcriptions.MergeSpeakers(r.Context(), requestUserID(r), parsedTranscriptID, sourceID, targetID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeAPIError(w, http.StatusNotFound, "SPEAKER_NOT_FOUND", "source or target speaker was not found")
 		return
@@ -391,7 +391,7 @@ func valueOr(value *string, fallback string) string {
 
 func (s *Server) logTranscriptionError(r *http.Request, operation, entityID string, err error) {
 	s.logger.ErrorContext(r.Context(), operation,
-		"request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(s.userID),
+		"request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(requestUserID(r)),
 		"transcription_entity_id", entityID, "error", err,
 	)
 }

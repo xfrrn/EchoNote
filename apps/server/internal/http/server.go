@@ -36,8 +36,10 @@ type Server struct {
 	searches             *service.SearchService
 	ai                   *service.AIService
 	exports              *service.ExportService
+	auth                 *repository.AuthRepository
 	transcriptionEnabled bool
-	userID               pgtype.UUID
+	authConfig           AuthConfig
+	dummyPasswordHash    string
 	logger               *slog.Logger
 }
 
@@ -52,18 +54,23 @@ func NewRouter(
 	searches *service.SearchService,
 	ai *service.AIService,
 	exports *service.ExportService,
+	authRepository *repository.AuthRepository,
 	transcriptionEnabled bool,
-	userID pgtype.UUID,
+	authConfig AuthConfig,
 	logger *slog.Logger,
 ) http.Handler {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
-	router.Use(requestLogger(logger, formatUUID(userID)))
 	router.Use(recoverer(logger))
+	router.Use(apiNoStore)
+	router.Use(sameOrigin(authConfig.PublicOrigin))
+	router.Use(authenticate(authRepository, authConfig.DevelopmentUserID, logger))
+	router.Use(requestLogger(logger))
+	dummyPasswordHash, _ := authConfig.dummyPasswordHash()
 	return HandlerFromMux(&Server{
 		database: database, imports: imports, library: library, notes: notes,
 		transcriptions: transcriptions, searches: searches, ai: ai, exports: exports, transcriptionEnabled: transcriptionEnabled,
-		userID: userID, logger: logger,
+		auth: authRepository, authConfig: authConfig, dummyPasswordHash: dummyPasswordHash, logger: logger,
 	}, router)
 }
 
@@ -92,21 +99,21 @@ func (s *Server) CreateCapture(w http.ResponseWriter, r *http.Request) {
 			writeAPIError(w, http.StatusBadRequest, "INVALID_EPISODE_ID", "episode_id must be a UUID")
 			return
 		}
-		result, err = s.notes.CreateForEpisode(r.Context(), s.userID, parsedEpisodeID, clientNoteID, content, request.CreatedAt)
+		result, err = s.notes.CreateForEpisode(r.Context(), requestUserID(r), parsedEpisodeID, clientNoteID, content, request.CreatedAt)
 	} else {
 		episodeURL, err = parseHTTPURL(episodeURL)
 		if err != nil {
 			writeAPIError(w, http.StatusBadRequest, "INVALID_URL", "episode_url must be an HTTP or HTTPS URL")
 			return
 		}
-		result, err = s.notes.CaptureURL(r.Context(), s.userID, clientNoteID, episodeURL, content, request.CreatedAt)
+		result, err = s.notes.CaptureURL(r.Context(), requestUserID(r), clientNoteID, episodeURL, content, request.CreatedAt)
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeAPIError(w, http.StatusNotFound, "EPISODE_NOT_FOUND", "episode was not found")
 		return
 	}
 	if err != nil {
-		s.logger.ErrorContext(r.Context(), "create capture", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(s.userID), "error", err)
+		s.logger.ErrorContext(r.Context(), "create capture", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(requestUserID(r)), "error", err)
 		writeAPIError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
 		return
 	}
@@ -128,13 +135,13 @@ func (s *Server) ListEpisodeNotes(w http.ResponseWriter, r *http.Request, episod
 		writeAPIError(w, http.StatusBadRequest, "INVALID_EPISODE_ID", "episodeId must be a UUID")
 		return
 	}
-	rows, err := s.notes.List(r.Context(), s.userID, parsedEpisodeID)
+	rows, err := s.notes.List(r.Context(), requestUserID(r), parsedEpisodeID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeAPIError(w, http.StatusNotFound, "EPISODE_NOT_FOUND", "episode was not found")
 		return
 	}
 	if err != nil {
-		s.logger.ErrorContext(r.Context(), "list notes", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(s.userID), "episode_id", episodeID, "error", err)
+		s.logger.ErrorContext(r.Context(), "list notes", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(requestUserID(r)), "episode_id", episodeID, "error", err)
 		writeAPIError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
 		return
 	}
@@ -161,13 +168,13 @@ func (s *Server) CreateEpisodeNote(w http.ResponseWriter, r *http.Request, episo
 		writeAPIError(w, http.StatusBadRequest, "INVALID_NOTE", "client_note_id, content, and created_at are required")
 		return
 	}
-	result, err := s.notes.CreateForEpisode(r.Context(), s.userID, parsedEpisodeID, clientNoteID, content, request.CreatedAt)
+	result, err := s.notes.CreateForEpisode(r.Context(), requestUserID(r), parsedEpisodeID, clientNoteID, content, request.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeAPIError(w, http.StatusNotFound, "EPISODE_NOT_FOUND", "episode was not found")
 		return
 	}
 	if err != nil {
-		s.logger.ErrorContext(r.Context(), "create note", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(s.userID), "episode_id", episodeID, "error", err)
+		s.logger.ErrorContext(r.Context(), "create note", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(requestUserID(r)), "episode_id", episodeID, "error", err)
 		writeAPIError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
 		return
 	}
@@ -194,13 +201,13 @@ func (s *Server) UpdateNote(w http.ResponseWriter, r *http.Request, noteID strin
 		writeAPIError(w, http.StatusBadRequest, "INVALID_NOTE", "content is required")
 		return
 	}
-	note, err := s.notes.Update(r.Context(), s.userID, parsedNoteID, request.Content)
+	note, err := s.notes.Update(r.Context(), requestUserID(r), parsedNoteID, request.Content)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeAPIError(w, http.StatusNotFound, "NOTE_NOT_FOUND", "note was not found")
 		return
 	}
 	if err != nil {
-		s.logger.ErrorContext(r.Context(), "update note", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(s.userID), "note_id", noteID, "error", err)
+		s.logger.ErrorContext(r.Context(), "update note", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(requestUserID(r)), "note_id", noteID, "error", err)
 		writeAPIError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
 		return
 	}
@@ -213,15 +220,15 @@ func (s *Server) DeleteNote(w http.ResponseWriter, r *http.Request, noteID strin
 		writeAPIError(w, http.StatusBadRequest, "INVALID_NOTE_ID", "noteId must be a UUID")
 		return
 	}
-	if err := s.notes.Delete(r.Context(), s.userID, parsedNoteID); errors.Is(err, pgx.ErrNoRows) {
+	if err := s.notes.Delete(r.Context(), requestUserID(r), parsedNoteID); errors.Is(err, pgx.ErrNoRows) {
 		writeAPIError(w, http.StatusNotFound, "NOTE_NOT_FOUND", "note was not found")
 		return
 	} else if err != nil {
-		s.logger.ErrorContext(r.Context(), "delete note", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(s.userID), "note_id", noteID, "error", err)
+		s.logger.ErrorContext(r.Context(), "delete note", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(requestUserID(r)), "note_id", noteID, "error", err)
 		writeAPIError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
 		return
 	}
-	s.logger.InfoContext(r.Context(), "note deleted", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(s.userID), "note_id", noteID)
+	s.logger.InfoContext(r.Context(), "note deleted", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(requestUserID(r)), "note_id", noteID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -237,9 +244,9 @@ func (s *Server) ListEpisodes(w http.ResponseWriter, r *http.Request, params Lis
 		writeAPIError(w, http.StatusBadRequest, "INVALID_PAGINATION", "limit must be 1-100 and offset must be non-negative")
 		return
 	}
-	rows, total, err := s.library.List(r.Context(), s.userID, int32(limit), int32(offset))
+	rows, total, err := s.library.List(r.Context(), requestUserID(r), int32(limit), int32(offset))
 	if err != nil {
-		s.logger.ErrorContext(r.Context(), "list episodes", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(s.userID), "error", err)
+		s.logger.ErrorContext(r.Context(), "list episodes", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(requestUserID(r)), "error", err)
 		writeAPIError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
 		return
 	}
@@ -256,13 +263,13 @@ func (s *Server) GetEpisode(w http.ResponseWriter, r *http.Request, episodeID st
 		writeAPIError(w, http.StatusBadRequest, "INVALID_EPISODE_ID", "episodeId must be a UUID")
 		return
 	}
-	detail, err := s.library.Get(r.Context(), s.userID, parsedID)
+	detail, err := s.library.Get(r.Context(), requestUserID(r), parsedID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeAPIError(w, http.StatusNotFound, "EPISODE_NOT_FOUND", "episode was not found")
 		return
 	}
 	if err != nil {
-		s.logger.ErrorContext(r.Context(), "get episode", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(s.userID), "episode_id", episodeID, "error", err)
+		s.logger.ErrorContext(r.Context(), "get episode", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(requestUserID(r)), "episode_id", episodeID, "error", err)
 		writeAPIError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
 		return
 	}
@@ -275,15 +282,15 @@ func (s *Server) DeleteEpisode(w http.ResponseWriter, r *http.Request, episodeID
 		writeAPIError(w, http.StatusBadRequest, "INVALID_EPISODE_ID", "episodeId must be a UUID")
 		return
 	}
-	if err := s.library.Delete(r.Context(), s.userID, parsedID); errors.Is(err, pgx.ErrNoRows) {
+	if err := s.library.Delete(r.Context(), requestUserID(r), parsedID); errors.Is(err, pgx.ErrNoRows) {
 		writeAPIError(w, http.StatusNotFound, "EPISODE_NOT_FOUND", "episode was not found")
 		return
 	} else if err != nil {
-		s.logger.ErrorContext(r.Context(), "delete episode", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(s.userID), "episode_id", episodeID, "error", err)
+		s.logger.ErrorContext(r.Context(), "delete episode", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(requestUserID(r)), "episode_id", episodeID, "error", err)
 		writeAPIError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
 		return
 	}
-	s.logger.InfoContext(r.Context(), "episode deleted", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(s.userID), "episode_id", episodeID)
+	s.logger.InfoContext(r.Context(), "episode deleted", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(requestUserID(r)), "episode_id", episodeID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -299,9 +306,9 @@ func (s *Server) CreateImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	request.Url = parsedURL
-	status, err := s.imports.Create(r.Context(), s.userID, request.Url)
+	status, err := s.imports.Create(r.Context(), requestUserID(r), request.Url)
 	if err != nil {
-		s.logger.ErrorContext(r.Context(), "create import", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(s.userID), "error", err)
+		s.logger.ErrorContext(r.Context(), "create import", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(requestUserID(r)), "error", err)
 		writeAPIError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
 		return
 	}
@@ -314,13 +321,13 @@ func (s *Server) GetImport(w http.ResponseWriter, r *http.Request, importID stri
 		writeAPIError(w, http.StatusBadRequest, "INVALID_IMPORT_ID", "importId must be a UUID")
 		return
 	}
-	status, err := s.imports.Get(r.Context(), s.userID, parsedID)
+	status, err := s.imports.Get(r.Context(), requestUserID(r), parsedID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeAPIError(w, http.StatusNotFound, "IMPORT_NOT_FOUND", "import was not found")
 		return
 	}
 	if err != nil {
-		s.logger.ErrorContext(r.Context(), "get import", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(s.userID), "import_id", importID, "error", err)
+		s.logger.ErrorContext(r.Context(), "get import", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(requestUserID(r)), "import_id", importID, "error", err)
 		writeAPIError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
 		return
 	}
@@ -358,11 +365,12 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	_ = json.NewEncoder(w).Encode(value)
 }
 
-func requestLogger(logger *slog.Logger, userID string) func(http.Handler) http.Handler {
+func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			started := time.Now()
 			requestID := middleware.GetReqID(r.Context())
+			userID := formatUUID(requestUserID(r))
 			w.Header().Set("X-Request-ID", requestID)
 			wrapped := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 			next.ServeHTTP(wrapped, r)

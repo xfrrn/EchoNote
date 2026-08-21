@@ -174,7 +174,7 @@ INSERT INTO jobs (
     $6,
     $7,
     $8,
-    $9
+    COALESCE($9::timestamptz, now())
 )
 RETURNING id, user_id, type, entity_type, entity_id, payload, status, stage, priority, attempt, max_attempts, run_after, locked_by, locked_at, error_code, error_message, created_at, updated_at, completed_at
 `

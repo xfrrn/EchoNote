@@ -47,6 +47,10 @@ func run() error {
 		return err
 	}
 	defer pool.Close()
+	authRepository := repository.NewAuthRepository(pool)
+	if err := authRepository.EnsurePlaceholderUser(ctx, cfg.DevelopmentUserID); err != nil {
+		return err
+	}
 	var embeddingProvider searchdomain.EmbeddingProvider
 	if cfg.EmbeddingEnabled() {
 		embeddingProvider, err = embedding.NewAliyun(cfg.EmbeddingEndpoint, cfg.EmbeddingAPIKey, nil)
@@ -81,8 +85,12 @@ func run() error {
 			searchService,
 			aiService,
 			exportService,
+			authRepository,
 			cfg.TranscriptionEnabled(),
-			cfg.UserID,
+			httpapi.AuthConfig{
+				PublicOrigin: cfg.PublicOrigin, SessionTTL: cfg.SessionTTL, PasswordCost: cfg.PasswordBcryptCost,
+				SecureCookies: cfg.SecureCookies(), DevelopmentUserID: cfg.DevelopmentUserID,
+			},
 			logger,
 		),
 		ReadHeaderTimeout: 5 * time.Second,

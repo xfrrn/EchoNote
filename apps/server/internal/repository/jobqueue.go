@@ -47,10 +47,6 @@ func enqueue(ctx context.Context, queries *db.Queries, input NewJob) (db.Job, er
 	if input.MaxAttempts == 0 {
 		input.MaxAttempts = 3
 	}
-	if input.RunAfter.IsZero() {
-		input.RunAfter = time.Now()
-	}
-
 	job, err := queries.EnqueueJob(ctx, db.EnqueueJobParams{
 		UserID:      input.UserID,
 		JobType:     input.Type,
@@ -225,6 +221,9 @@ func createEvent(ctx context.Context, queries *db.Queries, job db.Job, eventType
 }
 
 func timestamptz(value time.Time) pgtype.Timestamptz {
+	if value.IsZero() {
+		return pgtype.Timestamptz{}
+	}
 	return pgtype.Timestamptz{Time: value, Valid: true}
 }
 

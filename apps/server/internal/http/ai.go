@@ -22,7 +22,7 @@ func (s *Server) ListEpisodeAIArtifacts(w http.ResponseWriter, r *http.Request, 
 		writeAPIError(w, http.StatusBadRequest, "INVALID_EPISODE_ID", "episodeId must be a UUID")
 		return
 	}
-	artifacts, err := s.ai.Artifacts(r.Context(), s.userID, parsedEpisodeID)
+	artifacts, err := s.ai.Artifacts(r.Context(), requestUserID(r), parsedEpisodeID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeAPIError(w, http.StatusNotFound, "EPISODE_NOT_FOUND", "episode was not found")
 		return
@@ -45,7 +45,7 @@ func (s *Server) RequestEpisodeAIArtifact(w http.ResponseWriter, r *http.Request
 		writeAPIError(w, http.StatusBadRequest, "INVALID_EPISODE_ID", "episodeId must be a UUID")
 		return
 	}
-	artifact, err := s.ai.RequestArtifact(r.Context(), s.userID, parsedEpisodeID)
+	artifact, err := s.ai.RequestArtifact(r.Context(), requestUserID(r), parsedEpisodeID)
 	switch {
 	case errors.Is(err, service.ErrAIUnavailable):
 		writeAPIError(w, http.StatusServiceUnavailable, "AI_DISABLED", "AI provider is not configured")
@@ -87,7 +87,7 @@ func (s *Server) CreateConversation(w http.ResponseWriter, r *http.Request) {
 	if request.Title != nil {
 		title = strings.TrimSpace(*request.Title)
 	}
-	conversation, err := s.ai.CreateConversation(r.Context(), s.userID, episodeID, title)
+	conversation, err := s.ai.CreateConversation(r.Context(), requestUserID(r), episodeID, title)
 	switch {
 	case errors.Is(err, repository.ErrAITranscriptNotReady):
 		writeAPIError(w, http.StatusConflict, "TRANSCRIPT_NOT_READY", "episode has no active transcript")
@@ -109,7 +109,7 @@ func (s *Server) GetConversation(w http.ResponseWriter, r *http.Request, convers
 		writeAPIError(w, http.StatusBadRequest, "INVALID_CONVERSATION_ID", "conversationId must be a UUID")
 		return
 	}
-	detail, err := s.ai.Conversation(r.Context(), s.userID, parsedConversationID)
+	detail, err := s.ai.Conversation(r.Context(), requestUserID(r), parsedConversationID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeAPIError(w, http.StatusNotFound, "CONVERSATION_NOT_FOUND", "conversation was not found")
 		return
@@ -139,7 +139,7 @@ func (s *Server) StreamConversationMessage(w http.ResponseWriter, r *http.Reques
 		writeAPIError(w, http.StatusBadRequest, "INVALID_MESSAGE", "client_message_id or content is invalid")
 		return
 	}
-	session, err := s.ai.PrepareChat(r.Context(), s.userID, parsedConversationID, clientMessageID, content)
+	session, err := s.ai.PrepareChat(r.Context(), requestUserID(r), parsedConversationID, clientMessageID, content)
 	switch {
 	case errors.Is(err, service.ErrAIUnavailable):
 		writeAPIError(w, http.StatusServiceUnavailable, "AI_DISABLED", "AI provider is not configured")
@@ -292,6 +292,6 @@ func aiSSEEvent(event service.ChatStreamEvent) (string, []byte, error) {
 
 func (s *Server) logAIError(r *http.Request, operation string, err error) {
 	s.logger.ErrorContext(r.Context(), operation,
-		"request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(s.userID), "error", err,
+		"request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(requestUserID(r)), "error", err,
 	)
 }

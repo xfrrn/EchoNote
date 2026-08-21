@@ -41,18 +41,18 @@ func (s *Server) SearchContent(w http.ResponseWriter, r *http.Request, params Se
 		writeAPIError(w, http.StatusBadRequest, "INVALID_SEARCH_SCOPE", "episode_id is only valid for episode scope")
 		return
 	}
-	output, err := s.searches.Search(r.Context(), s.userID, query, string(scope), episodeID, limit)
+	output, err := s.searches.Search(r.Context(), requestUserID(r), query, string(scope), episodeID, limit)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeAPIError(w, http.StatusNotFound, "EPISODE_NOT_FOUND", "episode was not found")
 		return
 	}
 	if err != nil {
-		s.logger.ErrorContext(r.Context(), "search content", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(s.userID), "error", err)
+		s.logger.ErrorContext(r.Context(), "search content", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(requestUserID(r)), "error", err)
 		writeAPIError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
 		return
 	}
 	if output.SemanticError != nil {
-		s.logger.WarnContext(r.Context(), "semantic search unavailable", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(s.userID), "error", output.SemanticError)
+		s.logger.WarnContext(r.Context(), "semantic search unavailable", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(requestUserID(r)), "error", output.SemanticError)
 	}
 	items := make([]SearchResult, len(output.Items))
 	for index, item := range output.Items {
@@ -83,13 +83,13 @@ func (s *Server) ReindexSearch(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusBadRequest, "INVALID_SEARCH_SCOPE", "episode_id is only valid for episode scope")
 		return
 	}
-	queued, err := s.searches.Reindex(r.Context(), s.userID, episodeID)
+	queued, err := s.searches.Reindex(r.Context(), requestUserID(r), episodeID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeAPIError(w, http.StatusNotFound, "EPISODE_NOT_FOUND", "episode was not found")
 		return
 	}
 	if err != nil {
-		s.logger.ErrorContext(r.Context(), "reindex search", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(s.userID), "error", err)
+		s.logger.ErrorContext(r.Context(), "reindex search", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(requestUserID(r)), "error", err)
 		writeAPIError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
 		return
 	}

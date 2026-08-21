@@ -35,7 +35,6 @@ func TestJobQueueLifecycle(t *testing.T) {
 		Type:       jobType,
 		EntityType: "phase1_test",
 		EntityID:   randomUUID(t),
-		RunAfter:   time.Now().Add(-time.Second),
 	})
 	if err != nil {
 		t.Fatal(err)

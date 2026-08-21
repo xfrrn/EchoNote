@@ -36,6 +36,7 @@ func TestSearchHTTPKeywordAndReindex(t *testing.T) {
 	}
 	defer pool.Close()
 	userID := randomHTTPUUID(t)
+	defer ensureTestUsers(t, pool, userID)()
 	defer func() {
 		_, _ = pool.Exec(context.Background(), "DELETE FROM imports WHERE user_id = $1", userID)
 		_, _ = pool.Exec(context.Background(), "DELETE FROM jobs WHERE user_id = $1", userID)
@@ -66,7 +67,7 @@ func TestSearchHTTPKeywordAndReindex(t *testing.T) {
 	}
 	router := NewRouter(
 		pool, imports, repository.NewLibraryRepository(pool), notes, nil,
-		service.NewSearchService(searchRepository, nil), nil, nil, false, userID,
+		service.NewSearchService(searchRepository, nil), nil, nil, nil, false, developmentAuth(userID),
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 	)
 	query := url.Values{"q": {"关键字"}, "scope": {"episode"}, "episode_id": {formatUUID(episodeID)}}

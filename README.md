@@ -2,7 +2,7 @@
 
 EchoNote 是一个“智能听闻笔记本”：导入播客，自动转写，沉淀笔记，并提供 AI 总结与对话。
 
-本仓库为 **Monorepo**，目前包含已可运行的 Web 前端（高保真 PWA Demo）与完成 Phase 8 Export 的 Go 后端。
+本仓库为 **Monorepo**，目前包含已可运行的 Web 前端（高保真 PWA Demo）与完成 Phase 9 Identity 的 Go 后端。
 
 ## 仓库结构
 
@@ -35,9 +35,9 @@ pnpm preview    # 预览构建产物
 
 > 详见 [`apps/web/README.md`](apps/web/README.md)（PWA 部署、Design Tokens、测试模式等）。
 
-## 后端（Phase 8）
+## 后端（Phase 9）
 
-`apps/server` 已完成基础设施、Apple Podcasts/RSS/直接音频导入、Episode Library、Capture/Notes、异步 Transcription/Transcript/Speaker、Hybrid Search、按需 AI Artifact、带可信引用的单期 SSE Conversation，以及 Markdown / Apple Notes Share Content Export。Web Demo 暂未从 Mock Data 切换到后端；生产发布前还需完成 Auth、真实 Web 接入、部署安全和灾备验收，详见 [生产就绪补全方案](docs/architecture/production-readiness.md)。
+`apps/server` 已完成基础设施、业务垂直切片，以及用户名密码登录、数据库 Session、CSRF Origin 校验和管理员用户命令。Web Demo 暂未从 Mock Data 切换到后端；生产发布前还需完成真实 Web 接入、部署安全和灾备验收，详见 [生产就绪补全方案](docs/architecture/production-readiness.md)。
 
 ```bash
 cd apps/server

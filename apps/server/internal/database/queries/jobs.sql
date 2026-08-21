@@ -18,7 +18,7 @@ INSERT INTO jobs (
     sqlc.arg(stage),
     sqlc.arg(priority),
     sqlc.arg(max_attempts),
-    sqlc.arg(run_after)
+    COALESCE(sqlc.narg(run_after)::timestamptz, now())
 )
 RETURNING *;
 

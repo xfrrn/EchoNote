@@ -19,7 +19,10 @@ type Config struct {
 	Environment        string
 	ServerPort         int
 	DatabaseURL        string
+	PublicOrigin       string
 	LogLevel           slog.Level
+	SessionTTL         time.Duration
+	PasswordBcryptCost int
 	WorkerPollInterval time.Duration
 	WorkerLeaseTimeout time.Duration
 	ASRPollInterval    time.Duration
@@ -41,13 +44,15 @@ type Config struct {
 	StorageSecretKey   string
 	FFmpegPath         string
 	FFprobePath        string
-	UserID             pgtype.UUID
+	DevelopmentUserID  pgtype.UUID
 }
 
 func Load() (Config, error) {
 	cfg := Config{
 		Environment:        envOrDefault("APP_ENV", "development"),
 		DatabaseURL:        strings.TrimSpace(os.Getenv("DATABASE_URL")),
+		PublicOrigin:       strings.TrimSuffix(strings.TrimSpace(os.Getenv("PUBLIC_ORIGIN")), "/"),
+		SessionTTL:         30 * 24 * time.Hour,
 		WorkerPollInterval: time.Second,
 		WorkerLeaseTimeout: 5 * time.Minute,
 		ASRPollInterval:    5 * time.Second,
@@ -71,14 +76,30 @@ func Load() (Config, error) {
 		FFprobePath:        envOrDefault("FFPROBE_PATH", "ffprobe"),
 	}
 
-	if cfg.Environment != "development" && cfg.Environment != "production" && cfg.Environment != "test" {
-		return Config{}, fmt.Errorf("APP_ENV must be development, production, or test")
+	if cfg.Environment != "development" && cfg.Environment != "test" && cfg.Environment != "staging" && cfg.Environment != "production" {
+		return Config{}, fmt.Errorf("APP_ENV must be development, test, staging, or production")
 	}
 	if cfg.DatabaseURL == "" {
 		return Config{}, fmt.Errorf("DATABASE_URL is required")
 	}
-	if err := cfg.UserID.Scan(envOrDefault("ECHONOTE_USER_ID", defaultUserID)); err != nil {
+	developmentUserID := strings.TrimSpace(os.Getenv("ECHONOTE_USER_ID"))
+	if cfg.Environment == "staging" || cfg.Environment == "production" {
+		if developmentUserID != "" {
+			return Config{}, fmt.Errorf("ECHONOTE_USER_ID is forbidden in staging and production")
+		}
+		if cfg.PublicOrigin == "" {
+			return Config{}, fmt.Errorf("PUBLIC_ORIGIN is required in staging and production")
+		}
+	} else if err := cfg.DevelopmentUserID.Scan(envOrDefault("ECHONOTE_USER_ID", defaultUserID)); err != nil {
 		return Config{}, fmt.Errorf("ECHONOTE_USER_ID must be a UUID")
+	}
+	if cfg.PublicOrigin != "" {
+		origin, parseErr := url.Parse(cfg.PublicOrigin)
+		secureEnvironment := cfg.Environment == "staging" || cfg.Environment == "production"
+		allowedScheme := origin.Scheme == "https" || (!secureEnvironment && origin.Scheme == "http")
+		if parseErr != nil || !allowedScheme || origin.Host == "" || origin.User != nil || origin.RawQuery != "" || origin.Fragment != "" || (origin.Path != "" && origin.Path != "/") {
+			return Config{}, fmt.Errorf("PUBLIC_ORIGIN must be an HTTPS origin without credentials or a path")
+		}
 	}
 
 	port, err := strconv.Atoi(envOrDefault("SERVER_PORT", "8080"))
@@ -86,12 +107,20 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("SERVER_PORT must be an integer between 1 and 65535")
 	}
 	cfg.ServerPort = port
+	cost, err := strconv.Atoi(envOrDefault("PASSWORD_BCRYPT_COST", "12"))
+	if err != nil || cost < 10 || cost > 16 {
+		return Config{}, fmt.Errorf("PASSWORD_BCRYPT_COST must be an integer between 10 and 16")
+	}
+	cfg.PasswordBcryptCost = cost
 
 	if err := cfg.LogLevel.UnmarshalText([]byte(envOrDefault("LOG_LEVEL", "info"))); err != nil {
 		return Config{}, fmt.Errorf("LOG_LEVEL: %w", err)
 	}
 
 	if cfg.WorkerPollInterval, err = positiveDuration("WORKER_POLL_INTERVAL", cfg.WorkerPollInterval); err != nil {
+		return Config{}, err
+	}
+	if cfg.SessionTTL, err = positiveDuration("SESSION_TTL", cfg.SessionTTL); err != nil {
 		return Config{}, err
 	}
 	if cfg.WorkerLeaseTimeout, err = positiveDuration("WORKER_LEASE_TIMEOUT", cfg.WorkerLeaseTimeout); err != nil {
@@ -138,6 +167,10 @@ func Load() (Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func (cfg Config) SecureCookies() bool {
+	return cfg.Environment == "staging" || cfg.Environment == "production"
 }
 
 func (cfg Config) ValidateTranscription() error {

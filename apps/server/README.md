@@ -1,6 +1,6 @@
 # EchoNote 后端
 
-Go 模块化单体，当前完成 Phase 1–8：基础设施、Import、Library、Notes、异步 Transcription / Transcript / Speaker、Search、AI，以及 Export 垂直切片。
+Go 模块化单体，当前完成 Phase 1–9：基础设施、业务垂直切片，以及数据库 Session 身份与请求安全。
 
 ## 本地启动
 
@@ -25,7 +25,7 @@ go run ./cmd/api
 go run ./cmd/worker
 ```
 
-API 和 Worker 是独立进程。Worker 处理 `resolve_episode`、转录状态机、Search 索引、Embedding 与按需 AI Artifact，同时续租并回收超时任务。Auth 尚未进入当前 Phase，`ECHONOTE_USER_ID` 暂时提供单用户数据边界。
+API 和 Worker 是独立进程。Worker 处理 `resolve_episode`、转录状态机、Search 索引、Embedding 与按需 AI Artifact，同时续租并回收超时任务。`ECHONOTE_USER_ID` 只为 development / test 保留；staging / production 必须使用真实 Session，否则配置校验拒绝启动。
 
 未配置 ASR / Object Storage 时，已有 Import、Library、Notes 与 Transcript 读取仍可运行；新建和重试转录返回 503，Worker 只注册已有业务 Job。启用转录至少需要：
 
@@ -71,6 +71,32 @@ GET /readyz   PostgreSQL 就绪；不可用时返回 503
 
 OpenAPI 源文件为 `openapi/openapi.yaml`。
 
+## 身份与 Session
+
+```text
+POST /api/v1/auth/login   用户名和密码登录，设置 HttpOnly Session Cookie
+POST /api/v1/auth/logout  撤销当前 Session 并清除 Cookie
+GET  /api/v1/me           当前用户与 Session 过期时间
+```
+
+除登录、`/healthz` 和 `/readyz` 外，所有请求都要求有效 Session。staging / production 必须配置同域 HTTPS `PUBLIC_ORIGIN`；所有修改请求会拒绝缺失或不匹配的 `Origin`。认证 API 响应统一为 `Cache-Control: no-store`。
+
+数据库只保存随机 Session Token 的 SHA-256 摘要。密码使用 bcrypt，先在目标主机确定参数：
+
+```bash
+go run ./cmd/admin benchmark-password
+```
+
+管理员创建、认领旧数据用户和重置密码时，密码只能从交互式终端或标准输入读取：
+
+```bash
+go run ./cmd/admin create <username>
+go run ./cmd/admin claim <existing-user-id> <username>
+go run ./cmd/admin reset-password <username>
+```
+
+重置密码会在同一事务撤销该用户全部 Session。没有公共注册、找回密码或 OAuth。
+
 ## 导入 API
 
 ```text
@@ -94,7 +120,7 @@ GET    /api/v1/episodes/{episode_id}       Episode、Podcast、Sources 与独立
 DELETE /api/v1/episodes/{episode_id}       永久删除 Episode
 ```
 
-所有查询和删除都按 `ECHONOTE_USER_ID` 隔离。删除会级联清理 Source 与去重身份键，并在没有其他 Episode 时清理 Podcast；Import 与 Job 历史保留。
+所有查询和删除都按请求 Session 的 `user_id` 隔离。删除会级联清理 Source 与去重身份键，并在没有其他 Episode 时清理 Podcast；Import 与 Job 历史保留。
 
 Library 列表的 `note_count` 只统计未删除 Note。删除仍在解析的 Capture Episode 时，关联 Import Job 会被取消，避免 Worker 之后重新创建该 Episode。
 
@@ -184,7 +210,7 @@ go test ./...
 go vet ./...
 ```
 
-PostgreSQL 集成测试默认跳过。显式提供隔离的测试数据库后会执行 Migration，并验证 Job 生命周期、跨来源去重、Library 分页、Notes HTTP 生命周期、并发离线幂等、3 小时转录、Speaker ID 对调、单 Chunk 恢复、Transcript Version、Search、AI Artifact 缓存/失效、SSE Conversation、Citation 白名单、四种 Export Mode、用户隔离与删除级联：
+PostgreSQL 集成测试默认跳过。显式提供隔离的测试数据库后会执行 Migration，并验证 Session、CSRF、Job 生命周期、跨来源去重、Library 分页、Notes HTTP 生命周期、并发离线幂等、3 小时转录、Speaker ID 对调、单 Chunk 恢复、Transcript Version、Search、AI Artifact 缓存/失效、SSE Conversation、Citation 白名单、四种 Export Mode、用户隔离与删除级联：
 
 ```text
 ECHONOTE_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/echonote_test?sslmode=disable
@@ -198,6 +224,8 @@ ECHONOTE_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/echonote_
 cmd/api/                 API 入口
 cmd/worker/              Worker 入口
 cmd/migrate/             Migration CLI
+cmd/admin/               用户创建、认领、密码重置与 bcrypt 基准
+internal/auth/           用户名规范化、密码哈希与 Session Token
 internal/config/         环境配置
 internal/database/       pgx 连接、migration 与 sqlc 生成代码
 internal/http/           Chi 路由、OpenAPI handler、中间件
