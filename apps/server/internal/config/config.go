@@ -32,6 +32,8 @@ type Config struct {
 	ASRProvider        string
 	ASRAPIKey          string
 	ASREndpoint        string
+	ASRStandardModel   string
+	ASRQualityModel    string
 	EmbeddingProvider  string
 	EmbeddingAPIKey    string
 	EmbeddingEndpoint  string
@@ -66,6 +68,8 @@ func Load() (Config, error) {
 		ASRProvider:        strings.ToLower(strings.TrimSpace(os.Getenv("ASR_PROVIDER"))),
 		ASRAPIKey:          strings.TrimSpace(os.Getenv("ASR_API_KEY")),
 		ASREndpoint:        envOrDefault("ASR_ENDPOINT", "https://dashscope.aliyuncs.com"),
+		ASRStandardModel:   strings.ToLower(envOrDefault("ASR_STANDARD_MODEL", "paraformer-v2")),
+		ASRQualityModel:    strings.ToLower(envOrDefault("ASR_QUALITY_MODEL", "fun-asr")),
 		EmbeddingProvider:  strings.ToLower(strings.TrimSpace(os.Getenv("EMBEDDING_PROVIDER"))),
 		EmbeddingAPIKey:    strings.TrimSpace(os.Getenv("EMBEDDING_API_KEY")),
 		EmbeddingEndpoint:  envOrDefault("EMBEDDING_ENDPOINT", "https://dashscope.aliyuncs.com"),
@@ -153,6 +157,12 @@ func Load() (Config, error) {
 	}
 	if cfg.ASRProvider != "" && cfg.ASRProvider != "aliyun" {
 		return Config{}, fmt.Errorf("ASR_PROVIDER must be aliyun")
+	}
+	if cfg.ASRStandardModel != "paraformer-v2" {
+		return Config{}, fmt.Errorf("ASR_STANDARD_MODEL must be paraformer-v2")
+	}
+	if cfg.ASRQualityModel != "fun-asr" {
+		return Config{}, fmt.Errorf("ASR_QUALITY_MODEL must be fun-asr")
 	}
 	if cfg.StorageProvider != "" && cfg.StorageProvider != "aliyun_oss" {
 		return Config{}, fmt.Errorf("STORAGE_PROVIDER must be aliyun_oss")

@@ -30,6 +30,8 @@ development / test 环境的 API 会在同一进程启动 Worker，并自动检�
 ```text
 ASR_PROVIDER=aliyun
 ASR_API_KEY=...
+ASR_STANDARD_MODEL=paraformer-v2
+ASR_QUALITY_MODEL=fun-asr
 STORAGE_PROVIDER=aliyun_oss
 STORAGE_REGION=cn-beijing
 STORAGE_BUCKET=...
@@ -37,7 +39,7 @@ STORAGE_ACCESS_KEY=...
 STORAGE_SECRET_KEY=...
 ```
 
-完整配置和可选的 HTTPS Endpoint 见仓库根目录 `.env.example`。真实密钥不得提交。
+OSS 仅作为转写临时工作区：原始文件转码后删除，完整 FLAC 切片完成后删除，每个分片取得转写结果后删除；整期完成或取消时再执行兜底清理。完整配置和可选的 HTTPS Endpoint 见仓库根目录 `.env.example`。真实密钥不得提交。
 
 未配置 Embedding 时，Notes/Transcript 关键词搜索和索引重建仍可运行，响应 `mode=keyword`。启用语义与 Hybrid Search：
 
@@ -148,7 +150,7 @@ PATCH /api/v1/transcripts/{transcript_id}/speakers/{id} 重命名 / 更新角色
 POST /api/v1/transcripts/{transcript_id}/speakers/merge 合并 Speaker
 ```
 
-`economy` 使用 Paraformer-v2，`quality` 使用 Fun-ASR。音频统一转换为 16 kHz 单声道 FLAC，长音频按 90 分钟 Core Window 与 5 分钟左右重叠切片；算法和恢复语义见 `docs/architecture/transcription.md`。
+默认 `economy`（前端“标准转录”）使用 Paraformer-v2，`quality`（前端“高质量转录”）使用 Fun-ASR；两种模型共用 `ASR_API_KEY`，可分别通过 `ASR_STANDARD_MODEL` 和 `ASR_QUALITY_MODEL` 配置。音频统一转换为 16 kHz 单声道 FLAC，长音频按 90 分钟 Core Window 与 5 分钟左右重叠切片；算法和恢复语义见 `docs/architecture/transcription.md`。
 
 ## Search API
 

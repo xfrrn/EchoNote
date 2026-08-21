@@ -3,7 +3,8 @@
 ## 临时文件与对象
 
 - Worker 的唯一可写目录是 `/var/lib/echonote/tmp`。启动时只删除超过 `WORKER_TEMP_MAX_AGE` 的 `echonote-*` 常规文件，不遍历目录或符号链接。
-- `completed` / `canceled` 删除源音频与预处理音频；Completed Chunk 在 72 小时后清理；Failed 保留恢复材料；raw ASR JSON 保留到 Episode 删除。
+- 原始音频在预处理完成后删除，预处理 FLAC 在全部 Chunk 生成后删除，每个 Chunk 在结果入库后删除；`completed` / `canceled` 再做兜底清理，Failed 只保留当前恢复点所需对象。
+- 私有 Bucket 必须配置兜底生命周期，用于清理由进程崩溃产生的未记录孤儿对象；生命周期时长也是失败任务最长恢复窗口。
 - 主机临时目录和私有 Bucket 使用量达到 80% 时告警。若单个合法任务可能运行超过 24 小时，先提高 `WORKER_TEMP_MAX_AGE`。
 
 ## Cleanup Job 失败
@@ -32,7 +33,7 @@ sudo systemd-run --quiet --wait --pipe --collect --uid=echonote-maintenance \
   /opt/echonote/current/bin/echonote-maintenance retention --dry-run
 ```
 
-核对过期或撤销 Session 为 30 天、succeeded/canceled Job 为 30 天、failed Job 为 90 天；Job Event 随 Job 级联删除。统计获批后执行一次 `sudo systemctl start echonote-retention.service`，复核日志和业务读取，再用 `sudo systemctl enable --now echonote-retention.timer` 启用每日任务。命令没有普通 `--apply`，只有明确的 `--apply-system`；用户数据内容、Embedding、Transcript、Note、AI Artifact 与 raw ASR 不在此任务内删除。
+核对过期或撤销 Session 为 30 天、succeeded/canceled Job 为 30 天、failed Job 为 90 天；Job Event 随 Job 级联删除。统计获批后执行一次 `sudo systemctl start echonote-retention.service`，复核日志和业务读取，再用 `sudo systemctl enable --now echonote-retention.timer` 启用每日任务。命令没有普通 `--apply`，只有明确的 `--apply-system`；用户数据内容、Embedding、Transcript、Note 与 AI Artifact 不在此任务内删除。
 
 ## 证书与密钥
 

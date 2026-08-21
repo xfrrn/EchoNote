@@ -91,7 +91,7 @@ ASR 返回 Chunk 内局部时间。标准化后先换算到整期 Episode：
 episode_time = render_start_ms + local_time
 ```
 
-无效句子（空文本、负时间或 `end <= start`）丢弃；超出音频时长的时间戳裁剪到 `[0, duration_ms]`。原始 ASR JSON 长期保存，便于追查标准化差异。
+无效句子（空文本、负时间或 `end <= start`）丢弃；超出音频时长的时间戳裁剪到 `[0, duration_ms]`。只把标准化结果写入 PostgreSQL，不把原始 ASR JSON 长期保存到 OSS。
 
 ## Local Speaker 对齐
 
@@ -164,11 +164,12 @@ download_audio
 users/{user_id}/episodes/{episode_id}/transcription-runs/{run_id}/source/original
 users/{user_id}/episodes/{episode_id}/transcription-runs/{run_id}/source/prepared.flac
 users/{user_id}/episodes/{episode_id}/transcription-runs/{run_id}/chunks/{sequence}.flac
-users/{user_id}/episodes/{episode_id}/transcription-runs/{run_id}/raw-results/{sequence}.json
 ```
 
-- 原始与预处理音频：Run 完成或取消后删除。失败 Run 为支持断点续跑而保留，Retry、Cancel 或删除 Episode 后再处理。
-- Chunk 音频：Run 完成 72 小时后删除，保留单 Chunk Retry 窗口。
-- 原始 ASR JSON 与标准化 Transcript：长期保存。
+- 原始音频：预处理 FLAC 写入 OSS 并记录成功后立即删除。
+- 预处理 FLAC：全部 Chunk 写入 OSS 并记录成功后立即删除。
+- Chunk 音频：对应 ASR 结果完成读取并标准化入库后立即删除。
+- Run 完成或取消时再次扫描已记录的对象 Key，执行幂等兜底清理；删除失败由 Cleanup Job 重试。
+- 失败步骤只保留从当前恢复点继续所必需的对象；Retry、Cancel 或删除 Episode 会继续处理或清理。
 
-这里对整体方案中“Run 终态后删除”的表述做了收紧：`failed` 也是终态，但立即删除会让单 Chunk Retry 退化成整期重新下载和预处理，与阶段验收目标冲突。生产环境如需限制长期未处理失败 Run 的成本，应增加显式过期策略，而不是静默破坏恢复点。
+Bucket 仍应设置兜底生命周期，处理进程在对象写入后、数据库记录前异常退出等无法由应用追踪的孤儿对象；生命周期时长同时也是失败任务可恢复窗口。

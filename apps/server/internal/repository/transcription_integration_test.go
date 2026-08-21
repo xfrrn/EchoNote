@@ -48,7 +48,7 @@ func TestRetryQueuesOnlyFailedTranscriptionChunksAtTheirRecoveryPoint(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	repository := NewTranscriptionRepository(pool)
+	repository := NewTranscriptionRepository(pool, "paraformer-v2", "fun-asr")
 	run, err := repository.Create(ctx, userID, episodeID, "economy", RunConfig{})
 	if err != nil {
 		t.Fatal(err)

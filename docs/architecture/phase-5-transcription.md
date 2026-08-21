@@ -84,7 +84,7 @@ quality → fun-asr
 
 ### Aliyun OSS
 
-OSS 使用官方 Go SDK v2。对象 Key 由服务端生成并校验；自定义 Endpoint 必须是无凭据 HTTPS URL。源音频、标准化音频、Chunk 和原始 ASR JSON 使用独立路径，具体见转录算法文档。
+OSS 使用官方 Go SDK v2。对象 Key 由服务端生成并校验；自定义 Endpoint 必须是无凭据 HTTPS URL。源音频、标准化音频和 Chunk 只作为可恢复的临时对象，具体见转录算法文档。
 
 SDK 依据：[OSS Go SDK v2 迁移指南](https://www.alibabacloud.com/help/en/oss/developer-reference/migration-guide-in-go)。
 
@@ -146,16 +146,17 @@ POST /transcripts/{transcriptId}/speakers/merge
 
 ## 对象生命周期调整
 
-整体方案中的“Run 终态后删除原始和预处理音频”不能直接包括失败状态，否则单 Chunk Retry 会失去恢复材料。本阶段明确为：
+OSS 对象按最后使用点清理：
 
 ```text
-completed / canceled → 删除源音频和预处理音频
-completed             → Chunk 保留 72 小时后删除
-failed                → 保留恢复材料，等待 Retry / Cancel / Episode 删除
-raw ASR JSON           → 长期保存；Episode 删除时清理
+预处理完成             → 删除源音频
+全部 Chunk 渲染完成    → 删除预处理音频
+单 Chunk 结果成功入库  → 删除该 Chunk 音频
+completed / canceled   → 再次执行幂等兜底清理
+failed                 → 只保留当前恢复点所需对象
 ```
 
-删除 Episode 会先取消对应转录 Job，收集所有对象 Key，在删除数据库记录的同一事务中创建独立 cleanup Job。已完成 Transcript、Version、Speaker 和 Segment 的级联删除已由真实 PostgreSQL HTTP 集成测试覆盖。
+原始 ASR JSON 不再写入 OSS，只长期保存标准化 Transcript。删除 Episode 会先取消对应转录 Job，收集所有对象 Key，在删除数据库记录的同一事务中创建独立 cleanup Job。已完成 Transcript、Version、Speaker 和 Segment 的级联删除已由真实 PostgreSQL HTTP 集成测试覆盖。
 
 ## 验收
 

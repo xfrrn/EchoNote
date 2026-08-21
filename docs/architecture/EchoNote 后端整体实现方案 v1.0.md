@@ -1843,13 +1843,13 @@ AI Prompt 中应明确区分：
 
 ```text
 原始下载音频
-任务完成后删除
+预处理完成后删除
 
 切片音频
-保留 72 小时
+对应转写结果入库后删除
 
 云 ASR 原始 JSON
-长期保存
+不写入对象存储
 
 标准化 Transcript
 长期保存
@@ -1868,8 +1868,7 @@ users/{user_id}/
 └── episodes/{episode_id}/
     ├── source/
     ├── transcription-runs/{run_id}/
-    │   ├── chunks/
-    │   └── raw-results/
+    │   └── chunks/
     └── exports/
 ```
 

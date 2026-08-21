@@ -291,10 +291,10 @@ API 与 Worker 使用独立的非 root 系统用户运行。可写目录只包�
 
 保持 Phase 5 语义：
 
-- completed / canceled：删除源音频和预处理音频。
-- completed：Chunk 在 72 小时后清理。
-- failed：保留恢复材料，等待 Retry、Cancel 或 Episode 删除。
-- raw ASR JSON：保留到 Episode 删除。
+- 预处理完成后删除源音频，全部 Chunk 生成后删除预处理音频。
+- 单个 Chunk 的结果成功入库后立即删除对应音频。
+- completed / canceled 再执行幂等兜底清理；failed 只保留当前恢复点所需对象。
+- 原始 ASR JSON 不写入 OSS，只在 PostgreSQL 长期保存标准化 Transcript。
 
 补充生产要求：
 
@@ -396,7 +396,7 @@ Staging 使用目标云账号的小额度、独立 Key 完成：
 - 应用日志：30 天。
 - Embedding：长期保存，可重建。
 - Transcript、Note、AI Artifact：保留到 Episode 或用户删除。
-- raw ASR JSON：保留到 Episode 删除。
+- 原始 ASR JSON 不长期保存，只保留标准化 Transcript。
 
 清理任务必须按 user_id 或明确的系统范围执行，先提供 Dry Run 统计，再启用自动删除。
 

@@ -97,7 +97,7 @@ func TestLibraryLifecycle(t *testing.T) {
 	if err := library.Delete(ctx, otherUserID, podcastEpisodeID); !errors.Is(err, pgx.ErrNoRows) {
 		t.Fatalf("cross-user delete err=%v", err)
 	}
-	transcriptionRun, err := NewTranscriptionRepository(pool).Create(ctx, userID, directEpisodeID, "economy", RunConfig{})
+	transcriptionRun, err := NewTranscriptionRepository(pool, "paraformer-v2", "fun-asr").Create(ctx, userID, directEpisodeID, "economy", RunConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}

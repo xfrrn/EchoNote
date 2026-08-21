@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, type EpisodeDetail, type TranscriptionRun } from '../../shared/api/client'
+import { api, type EpisodeDetail, type TranscriptionProfile, type TranscriptionRun } from '../../shared/api/client'
 import { TranscriptSegmentItem } from './TranscriptSegmentItem'
 
 const terminal = (status?: TranscriptionRun['status']) => status === 'completed' || status === 'failed' || status === 'canceled'
@@ -22,7 +22,7 @@ export function TranscriptTab({ episode }: { episode: EpisodeDetail }) {
     void queryClient.invalidateQueries({ queryKey: ['episode', episode.id] })
     if (runId) void queryClient.invalidateQueries({ queryKey: ['transcription', runId] })
   }
-  const start = useMutation({ mutationFn: () => api.createTranscription(episode.id), onSuccess: (value) => { setCreatedRunId(value.id); refresh() } })
+  const start = useMutation({ mutationFn: (profile: TranscriptionProfile) => api.createTranscription(episode.id, profile), onSuccess: (value) => { setCreatedRunId(value.id); refresh() } })
   const retry = useMutation({ mutationFn: () => api.retryTranscription(runId), onSuccess: refresh })
   const cancel = useMutation({ mutationFn: () => api.cancelTranscription(runId), onSuccess: refresh })
   const rename = useMutation({ mutationFn: ({ speakerId, name }: { speakerId: string; name: string }) => api.renameSpeaker(transcript.data!.id, speakerId, name), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['transcript', episode.id] }) })
@@ -56,11 +56,11 @@ export function TranscriptTab({ episode }: { episode: EpisodeDetail }) {
   return (
     <div className="pb-6">
       <div className="px-4 pt-4">
-        {current ? <p className="text-caption text-ink-tertiary">转录阶段：{current.stage} · {current.completed_chunks}/{current.total_chunks} 个分片</p> : null}
+        {current ? <p className="text-caption text-ink-tertiary">{current.model} · 转录阶段：{current.stage} · {current.completed_chunks}/{current.total_chunks} 个分片</p> : null}
         {current?.error ? <p role="alert" className="mt-2 text-callout text-danger">{current.error.code}: {current.error.message}</p> : null}
         {actionError ? <p role="alert" className="mt-2 text-callout text-danger">{actionError instanceof Error ? actionError.message : '操作失败。'}</p> : null}
         {episode.resolve_status !== 'completed' ? <p className="text-body text-ink-secondary">节目链接仍在解析，完成后才能开始转录。</p> : null}
-        {episode.resolve_status === 'completed' && !runId ? <button type="button" disabled={start.isPending} onClick={() => start.mutate()} className="min-h-11 rounded-md bg-accent px-4 text-callout font-medium text-on-accent disabled:opacity-40">开始高质量转录</button> : null}
+        {episode.resolve_status === 'completed' && !runId ? <div className="grid grid-cols-2 gap-2"><button type="button" disabled={start.isPending} onClick={() => start.mutate('economy')} className="min-h-14 rounded-md bg-subtle px-3 text-callout font-medium text-ink disabled:opacity-40">标准转录<span className="block text-caption font-normal text-ink-tertiary">Paraformer V2</span></button><button type="button" disabled={start.isPending} onClick={() => start.mutate('quality')} className="min-h-14 rounded-md bg-accent px-3 text-callout font-medium text-on-accent disabled:opacity-40">高质量转录<span className="block text-caption font-normal opacity-80">Fun-ASR</span></button></div> : null}
         {current?.status === 'failed' ? <button type="button" disabled={retry.isPending} onClick={() => retry.mutate()} className="mt-3 min-h-11 rounded-md bg-accent px-4 text-callout font-medium text-on-accent disabled:opacity-40">重试转录</button> : null}
         {active ? <button type="button" disabled={cancel.isPending} onClick={() => cancel.mutate()} className="mt-3 min-h-11 rounded-md bg-subtle px-4 text-callout text-danger disabled:opacity-40">取消转录</button> : null}
       </div>

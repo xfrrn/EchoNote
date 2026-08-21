@@ -30,7 +30,6 @@ const (
 	CleanupAudioJobType      = "cleanup_audio"
 	TranscriptionRunEntity   = "transcription_run"
 	TranscriptionChunkEntity = "transcription_chunk"
-	chunkRetention           = 72 * time.Hour
 )
 
 var (
@@ -46,11 +45,13 @@ type RunConfig struct {
 }
 
 type TranscriptionRepository struct {
-	pool *pgxpool.Pool
+	pool          *pgxpool.Pool
+	standardModel string
+	qualityModel  string
 }
 
-func NewTranscriptionRepository(pool *pgxpool.Pool) *TranscriptionRepository {
-	return &TranscriptionRepository{pool: pool}
+func NewTranscriptionRepository(pool *pgxpool.Pool, standardModel, qualityModel string) *TranscriptionRepository {
+	return &TranscriptionRepository{pool: pool, standardModel: standardModel, qualityModel: qualityModel}
 }
 
 func (r *TranscriptionRepository) Create(
@@ -62,9 +63,9 @@ func (r *TranscriptionRepository) Create(
 	model := ""
 	switch profile {
 	case "economy":
-		model = "paraformer-v2"
+		model = r.standardModel
 	case "quality":
-		model = "fun-asr"
+		model = r.qualityModel
 	default:
 		return db.TranscriptionRun{}, errors.New("profile must be economy or quality")
 	}
@@ -186,6 +187,11 @@ func (r *TranscriptionRepository) FinishPrepare(ctx context.Context, runID pgtyp
 		if _, err := enqueue(ctx, queries, runJob(run, PlanTranscriptionJobType, time.Time{}, nil)); err != nil {
 			return db.TranscriptionRun{}, err
 		}
+		if run.SourceObjectKey != nil {
+			if err := enqueueObjectCleanup(ctx, queries, run, *run.SourceObjectKey); err != nil {
+				return db.TranscriptionRun{}, err
+			}
+		}
 		if err := transcriptionEvent(ctx, queries, runID, "audio_prepared", map[string]any{"duration_ms": durationMS}); err != nil {
 			return db.TranscriptionRun{}, err
 		}
@@ -271,6 +277,19 @@ func (r *TranscriptionRepository) FinishRender(ctx context.Context, chunkID pgty
 		}
 		if _, err := enqueue(ctx, queries, chunkJob(run, chunk, SubmitASRJobType, time.Time{})); err != nil {
 			return db.TranscriptionChunk{}, err
+		}
+		chunks, err := queries.ListRunChunks(ctx, run.ID)
+		if err != nil {
+			return db.TranscriptionChunk{}, err
+		}
+		allRendered := true
+		for _, current := range chunks {
+			allRendered = allRendered && current.ObjectKey != nil
+		}
+		if allRendered && run.PreparedObjectKey != nil {
+			if err := enqueueObjectCleanup(ctx, queries, run, *run.PreparedObjectKey); err != nil {
+				return db.TranscriptionChunk{}, err
+			}
 		}
 		return chunk, nil
 	})
@@ -360,13 +379,13 @@ func (r *TranscriptionRepository) FinishPoll(ctx context.Context, chunkID pgtype
 	return wrap("finish ASR poll", err)
 }
 
-func (r *TranscriptionRepository) FinishIngest(ctx context.Context, chunkID pgtype.UUID, rawKey string, result domain.Result) error {
+func (r *TranscriptionRepository) FinishIngest(ctx context.Context, chunkID pgtype.UUID, result domain.Result) error {
 	normalized, err := json.Marshal(result)
 	if err != nil {
 		return err
 	}
 	_, err = withTx(ctx, r.pool, func(queries *db.Queries) (db.TranscriptionRun, error) {
-		chunk, err := queries.SetChunkIngested(ctx, db.SetChunkIngestedParams{RawResultObjectKey: &rawKey, NormalizedResult: normalized, ChunkID: chunkID})
+		chunk, err := queries.SetChunkIngested(ctx, db.SetChunkIngestedParams{NormalizedResult: normalized, ChunkID: chunkID})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return db.TranscriptionRun{}, nil
 		}
@@ -384,6 +403,11 @@ func (r *TranscriptionRepository) FinishIngest(ctx context.Context, chunkID pgty
 		}
 		if run.CompletedChunks == run.TotalChunks {
 			if _, err := enqueue(ctx, queries, runJob(run, AlignSpeakersJobType, time.Time{}, nil)); err != nil {
+				return db.TranscriptionRun{}, err
+			}
+		}
+		if chunk.ObjectKey != nil {
+			if err := enqueueObjectCleanup(ctx, queries, run, *chunk.ObjectKey); err != nil {
 				return db.TranscriptionRun{}, err
 			}
 		}
@@ -551,7 +575,7 @@ func (r *TranscriptionRepository) ActivateTranscript(
 		if _, err := enqueue(ctx, queries, runJob(run, CleanupAudioJobType, time.Time{}, map[string]string{"scope": "audio"})); err != nil {
 			return db.TranscriptVersion{}, err
 		}
-		if _, err := enqueue(ctx, queries, runJob(run, CleanupAudioJobType, time.Now().Add(chunkRetention), map[string]string{"scope": "chunks"})); err != nil {
+		if _, err := enqueue(ctx, queries, runJob(run, CleanupAudioJobType, time.Time{}, map[string]string{"scope": "chunks"})); err != nil {
 			return db.TranscriptVersion{}, err
 		}
 		return version, nil
@@ -756,13 +780,15 @@ func (r *TranscriptionRepository) CleanupObjects(ctx context.Context, runID pgty
 			objects.AudioKeys = append(objects.AudioKeys, *value)
 		}
 	}
-	keys, err := db.New(r.pool).ListRunChunkObjectKeys(ctx, runID)
+	chunks, err := db.New(r.pool).ListRunChunks(ctx, runID)
 	if err != nil {
 		return CleanupObjects{}, err
 	}
-	for _, key := range keys {
-		if key != nil {
-			objects.ChunkKeys = append(objects.ChunkKeys, *key)
+	for _, chunk := range chunks {
+		for _, key := range []*string{chunk.ObjectKey, chunk.RawResultObjectKey} {
+			if key != nil {
+				objects.ChunkKeys = append(objects.ChunkKeys, *key)
+			}
 		}
 	}
 	return objects, nil
@@ -906,6 +932,17 @@ func runJob(run db.TranscriptionRun, jobType string, runAfter time.Time, payload
 		UserID: run.UserID, Type: jobType, EntityType: TranscriptionRunEntity, EntityID: run.ID,
 		Payload: encoded, MaxAttempts: 3, RunAfter: runAfter,
 	}
+}
+
+func enqueueObjectCleanup(ctx context.Context, queries *db.Queries, run db.TranscriptionRun, keys ...string) error {
+	if len(keys) == 0 {
+		return nil
+	}
+	_, err := enqueue(ctx, queries, runJob(run, CleanupAudioJobType, time.Time{}, map[string]any{
+		"scope": "objects",
+		"keys":  keys,
+	}))
+	return err
 }
 
 func chunkJob(run db.TranscriptionRun, chunk db.TranscriptionChunk, jobType string, runAfter time.Time) NewJob {

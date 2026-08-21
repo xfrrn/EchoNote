@@ -14,6 +14,8 @@ func TestLoad(t *testing.T) {
 	t.Setenv("WORKER_POLL_INTERVAL", "250ms")
 	t.Setenv("WORKER_LEASE_TIMEOUT", "2m")
 	t.Setenv("ASR_POLL_INTERVAL", "3s")
+	t.Setenv("ASR_STANDARD_MODEL", "")
+	t.Setenv("ASR_QUALITY_MODEL", "")
 	t.Setenv("SESSION_TTL", "24h")
 	t.Setenv("PASSWORD_BCRYPT_COST", "11")
 	t.Setenv("ECHONOTE_USER_ID", "fb48ddae-0ac8-4fb3-9e1a-f293ff938ed2")
@@ -30,6 +32,9 @@ func TestLoad(t *testing.T) {
 	}
 	if cfg.ASRPollInterval != 3*time.Second || cfg.FFmpegPath != "ffmpeg" || cfg.FFprobePath != "ffprobe" {
 		t.Fatalf("unexpected transcription defaults: %+v", cfg)
+	}
+	if cfg.ASRStandardModel != "paraformer-v2" || cfg.ASRQualityModel != "fun-asr" {
+		t.Fatalf("unexpected ASR models: standard=%q quality=%q", cfg.ASRStandardModel, cfg.ASRQualityModel)
 	}
 	if cfg.SessionTTL != 24*time.Hour || cfg.PasswordBcryptCost != 11 {
 		t.Fatalf("unexpected auth config: %+v", cfg)
@@ -86,6 +91,19 @@ func TestValidateTranscription(t *testing.T) {
 	}
 	if err := cfg.ValidateTranscription(); err != nil || !cfg.TranscriptionEnabled() {
 		t.Fatalf("enabled=%v err=%v", cfg.TranscriptionEnabled(), err)
+	}
+}
+
+func TestLoadRejectsInvalidASRModels(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://localhost/echonote")
+	t.Setenv("ASR_STANDARD_MODEL", "fun-asr")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected invalid standard ASR model to fail")
+	}
+	t.Setenv("ASR_STANDARD_MODEL", "paraformer-v2")
+	t.Setenv("ASR_QUALITY_MODEL", "paraformer-v2")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected invalid quality ASR model to fail")
 	}
 }
 
@@ -244,7 +262,7 @@ func TestProductionValidationRejectsPlaceholderProviderKey(t *testing.T) {
 
 func setSecureEnvironment(t *testing.T) {
 	t.Helper()
-	for _, key := range []string{"ASR_PROVIDER", "ASR_API_KEY", "STORAGE_PROVIDER", "STORAGE_REGION", "STORAGE_BUCKET", "STORAGE_ACCESS_KEY", "STORAGE_SECRET_KEY", "EMBEDDING_PROVIDER", "EMBEDDING_API_KEY", "LLM_PROVIDER", "LLM_API_KEY"} {
+	for _, key := range []string{"ASR_PROVIDER", "ASR_API_KEY", "ASR_STANDARD_MODEL", "ASR_QUALITY_MODEL", "STORAGE_PROVIDER", "STORAGE_REGION", "STORAGE_BUCKET", "STORAGE_ACCESS_KEY", "STORAGE_SECRET_KEY", "EMBEDDING_PROVIDER", "EMBEDDING_API_KEY", "LLM_PROVIDER", "LLM_API_KEY"} {
 		t.Setenv(key, "")
 	}
 	t.Setenv("APP_ENV", "production")

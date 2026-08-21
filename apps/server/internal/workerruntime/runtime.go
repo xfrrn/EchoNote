@@ -89,7 +89,7 @@ func Run(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) error {
 			return fmt.Errorf("configure audio processor: %w", err)
 		}
 		workflow := service.NewTranscriptionWorkflow(
-			repository.NewTranscriptionRepository(pool), audio.NewDownloader(), audioProcessor,
+			repository.NewTranscriptionRepository(pool, cfg.ASRStandardModel, cfg.ASRQualityModel), audio.NewDownloader(), audioProcessor,
 			objectStore, asrProvider, cfg.ASRPollInterval,
 		)
 		for jobType, handler := range workflow.Handlers() {

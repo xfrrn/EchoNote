@@ -62,7 +62,7 @@ func TestTranscriptionWorkflowCompletesLongAudioWithSwappedSpeakers(t *testing.T
 		t.Fatal(err)
 	}
 
-	transcriptions := repository.NewTranscriptionRepository(pool)
+	transcriptions := repository.NewTranscriptionRepository(pool, "paraformer-v2", "fun-asr")
 	run, err := transcriptions.Create(ctx, userID, episodeID, "quality", repository.RunConfig{LanguageHint: "en", SpeakerCount: 2})
 	if err != nil {
 		t.Fatal(err)
@@ -84,6 +84,8 @@ func TestTranscriptionWorkflowCompletesLongAudioWithSwappedSpeakers(t *testing.T
 	go func() { workerDone <- process.Run(workerContext) }()
 
 	completed := waitForRun(t, ctx, transcriptions, userID, run.ID, "completed")
+	waitForRunCleanup(t, ctx, transcriptions, userID, run.ID)
+	waitForStoreEmpty(t, ctx, store)
 	stopWorker()
 	if err := <-workerDone; err != nil {
 		t.Fatal(err)
@@ -125,10 +127,6 @@ func TestTranscriptionWorkflowCompletesLongAudioWithSwappedSpeakers(t *testing.T
 	if firstMap["0"] != secondMap["9"] || firstMap["1"] != secondMap["7"] {
 		t.Fatalf("first=%v second=%v", firstMap, secondMap)
 	}
-	if _, exists := store.get(objectPrefix(userID, episodeID, run.ID) + "/raw-results/0000.json"); !exists {
-		t.Fatal("raw ASR result was not persisted")
-	}
-
 	secondRun, err := transcriptions.Create(ctx, userID, episodeID, "economy", repository.RunConfig{LanguageHint: "en", SpeakerCount: 2})
 	if err != nil {
 		t.Fatal(err)
@@ -145,6 +143,8 @@ func TestTranscriptionWorkflowCompletesLongAudioWithSwappedSpeakers(t *testing.T
 	secondWorkerDone := make(chan error, 1)
 	go func() { secondWorkerDone <- secondProcess.Run(secondWorkerContext) }()
 	waitForRun(t, ctx, transcriptions, userID, secondRun.ID, "completed")
+	waitForRunCleanup(t, ctx, transcriptions, userID, secondRun.ID)
+	waitForStoreEmpty(t, ctx, store)
 	stopSecondWorker()
 	if err := <-secondWorkerDone; err != nil {
 		t.Fatal(err)
@@ -163,6 +163,18 @@ func TestTranscriptionWorkflowCompletesLongAudioWithSwappedSpeakers(t *testing.T
 	firstVersion, err := db.New(pool).GetTranscriptVersion(ctx, db.GetTranscriptVersionParams{TranscriptID: segments[0].TranscriptVersionID, UserID: userID})
 	if err != nil || firstVersion.IsActive || firstVersion.Version != 1 {
 		t.Fatalf("first version=%+v err=%v", firstVersion, err)
+	}
+}
+
+func TestCleanupDeletesExplicitObjects(t *testing.T) {
+	store := &fakeObjectStore{objects: map[string][]byte{"source": {}, "chunk": {}}}
+	workflow := &TranscriptionWorkflow{store: store}
+	job := db.Job{Payload: json.RawMessage(`{"scope":"objects","keys":["source","chunk"]}`)}
+	if err := workflow.cleanup(context.Background(), job); err != nil {
+		t.Fatal(err)
+	}
+	if store.count() != 0 {
+		t.Fatalf("objects remaining=%d", store.count())
 	}
 }
 
@@ -186,6 +198,44 @@ func waitForRun(
 		}
 		if run.Status == "failed" {
 			t.Fatalf("run failed: code=%v message=%v", run.ErrorCode, run.ErrorMessage)
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case <-ticker.C:
+		}
+	}
+}
+
+func waitForStoreEmpty(t *testing.T, ctx context.Context, store *fakeObjectStore) {
+	t.Helper()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for store.count() != 0 {
+		select {
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case <-ticker.C:
+		}
+	}
+}
+
+func waitForRunCleanup(
+	t *testing.T,
+	ctx context.Context,
+	repository *repository.TranscriptionRepository,
+	userID, runID pgtype.UUID,
+) {
+	t.Helper()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		run, err := repository.Get(ctx, userID, runID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if run.AudioCleanedAt.Valid && run.ChunksCleanedAt.Valid {
+			return
 		}
 		select {
 		case <-ctx.Done():
@@ -241,11 +291,10 @@ func (*fakeObjectStore) SignedURL(_ context.Context, key string, _ time.Duration
 	return "https://objects.example/" + url.PathEscape(key), nil
 }
 
-func (store *fakeObjectStore) get(key string) ([]byte, bool) {
+func (store *fakeObjectStore) count() int {
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	value, exists := store.objects[key]
-	return value, exists
+	return len(store.objects)
 }
 
 type fakeASR struct {

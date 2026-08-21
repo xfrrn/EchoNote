@@ -1,7 +1,6 @@
 package service
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -300,15 +299,11 @@ func (workflow *TranscriptionWorkflow) ingest(ctx context.Context, job db.Job) e
 		}
 		return err
 	}
-	rawKey := objectPrefix(chunk.UserID, chunk.EpisodeID, chunk.TranscriptionRunID) + "/raw-results/" + fmt.Sprintf("%04d.json", chunk.Sequence)
-	if err := workflow.store.Put(ctx, rawKey, bytes.NewReader(result.Raw)); err != nil {
-		return err
-	}
 	normalized := domain.ToEpisodeTime(result, chunk.RenderStartMs, *chunk.DurationMs)
 	if len(normalized.Segments) == 0 {
 		return permanent("ASR_RESULT_EMPTY", "ASR result contains no valid segments", nil)
 	}
-	return workflow.repository.FinishIngest(ctx, chunk.ID, rawKey, normalized)
+	return workflow.repository.FinishIngest(ctx, chunk.ID, normalized)
 }
 
 func (workflow *TranscriptionWorkflow) align(ctx context.Context, job db.Job) error {
@@ -380,7 +375,7 @@ func (workflow *TranscriptionWorkflow) cleanup(ctx context.Context, job db.Job) 
 	if err := json.Unmarshal(job.Payload, &payload); err != nil {
 		return permanent("CLEANUP_PAYLOAD_INVALID", "cleanup payload is invalid", err)
 	}
-	if payload.Scope == "deleted_episode" {
+	if payload.Scope == "deleted_episode" || payload.Scope == "objects" {
 		for _, key := range payload.Keys {
 			if err := workflow.store.Delete(ctx, key); err != nil {
 				return err

@@ -56,7 +56,7 @@ func TestTranscriptionHTTPFlow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	transcriptions := repository.NewTranscriptionRepository(pool)
+	transcriptions := repository.NewTranscriptionRepository(pool, "paraformer-v2", "fun-asr")
 	router := NewRouter(
 		pool, imports, repository.NewLibraryRepository(pool), repository.NewNotesRepository(pool),
 		transcriptions, nil, nil, nil, nil, true, developmentAuth(userID), slog.New(slog.NewTextHandler(io.Discard, nil)),

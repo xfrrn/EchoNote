@@ -96,7 +96,7 @@ func run(args []string) error {
 			repository.NewImportRepository(pool),
 			repository.NewLibraryRepository(pool),
 			repository.NewNotesRepository(pool),
-			repository.NewTranscriptionRepository(pool),
+			repository.NewTranscriptionRepository(pool, cfg.ASRStandardModel, cfg.ASRQualityModel),
 			searchService,
 			aiService,
 			exportService,
