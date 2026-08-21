@@ -41,7 +41,7 @@
     <script>
       (function () {
         try {
-          var saved = localStorage.getItem('echonote.test-mode')
+          var saved = localStorage.getItem('echonote.theme')
           var mode = saved ? JSON.parse(saved).state.theme : 'system'
           var dark = mode === 'dark' || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
           if (dark) document.documentElement.classList.add('dark')

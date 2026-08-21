@@ -226,7 +226,15 @@ SELECT
         FROM episode_sources AS source
         WHERE source.episode_id = episode.id
           AND source.user_id = episode.user_id
-    )::bigint AS source_count
+    )::bigint AS source_count,
+    (
+        SELECT run.id
+        FROM transcription_runs AS run
+        WHERE run.episode_id = episode.id
+          AND run.user_id = episode.user_id
+        ORDER BY run.created_at DESC, run.id DESC
+        LIMIT 1
+    ) AS transcription_run_id
 FROM episodes AS episode
 LEFT JOIN podcasts AS podcast
   ON podcast.id = episode.podcast_id
@@ -259,6 +267,7 @@ type GetLibraryEpisodeRow struct {
 	PodcastCoverUrl     *string            `json:"podcast_cover_url"`
 	PodcastFeedUrl      *string            `json:"podcast_feed_url"`
 	SourceCount         int64              `json:"source_count"`
+	TranscriptionRunID  pgtype.UUID        `json:"transcription_run_id"`
 }
 
 func (q *Queries) GetLibraryEpisode(ctx context.Context, arg GetLibraryEpisodeParams) (GetLibraryEpisodeRow, error) {
@@ -283,6 +292,7 @@ func (q *Queries) GetLibraryEpisode(ctx context.Context, arg GetLibraryEpisodePa
 		&i.PodcastCoverUrl,
 		&i.PodcastFeedUrl,
 		&i.SourceCount,
+		&i.TranscriptionRunID,
 	)
 	return i, err
 }
@@ -428,7 +438,15 @@ SELECT
         WHERE note.episode_id = episode.id
           AND note.user_id = episode.user_id
           AND note.deleted_at IS NULL
-    )::bigint AS note_count
+    )::bigint AS note_count,
+    (
+        SELECT run.id
+        FROM transcription_runs AS run
+        WHERE run.episode_id = episode.id
+          AND run.user_id = episode.user_id
+        ORDER BY run.created_at DESC, run.id DESC
+        LIMIT 1
+    ) AS transcription_run_id
 FROM episodes AS episode
 LEFT JOIN podcasts AS podcast
   ON podcast.id = episode.podcast_id
@@ -464,6 +482,7 @@ type ListLibraryEpisodesRow struct {
 	PodcastFeedUrl      *string            `json:"podcast_feed_url"`
 	SourceCount         int64              `json:"source_count"`
 	NoteCount           int64              `json:"note_count"`
+	TranscriptionRunID  pgtype.UUID        `json:"transcription_run_id"`
 }
 
 func (q *Queries) ListLibraryEpisodes(ctx context.Context, arg ListLibraryEpisodesParams) ([]ListLibraryEpisodesRow, error) {
@@ -494,6 +513,7 @@ func (q *Queries) ListLibraryEpisodes(ctx context.Context, arg ListLibraryEpisod
 			&i.PodcastFeedUrl,
 			&i.SourceCount,
 			&i.NoteCount,
+			&i.TranscriptionRunID,
 		); err != nil {
 			return nil, err
 		}

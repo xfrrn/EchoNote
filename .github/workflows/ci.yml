@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.6-pg17
+        env:
+          POSTGRES_DB: echonote_test
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d echonote_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      APP_ENV: test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/echonote_test?sslmode=disable
+      ECHONOTE_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/echonote_test?sslmode=disable
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache-dependency-path: apps/server/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: go run ./cmd/migrate up
+        working-directory: apps/server
+      - run: go generate ./...
+        working-directory: apps/server
+      - run: pnpm generate:contracts
+      - run: git diff --exit-code
+      - run: go test ./...
+        working-directory: apps/server
+      - run: go vet ./...
+        working-directory: apps/server
+      - run: pnpm build

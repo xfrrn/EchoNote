@@ -1,7 +1,6 @@
 import type { AiSummary, Episode, Note, SearchResultItem, Speaker, TranscriptSegment } from '../types'
 import { baseTranscriptSegments, fourSpeakerExtraSegments } from './transcript'
 import { useTestMode, type TestModeState } from '../store/test-mode'
-import { useCaptureStore } from '../store/capture'
 import { useLibraryStore } from '../store/library'
 
 export const statusLabels: Record<Episode['status'], string> = {
@@ -191,15 +190,14 @@ function buildEpisodes(state: TestModeState, extraNotes: Record<string, Note[]>)
 
 export function useEpisodes(): Episode[] {
   const state = useTestMode()
-  const extraNotes = useCaptureStore((s) => s.extraNotes)
   const imported = useLibraryStore((s) => s.imported)
-  return [...imported, ...buildEpisodes(state, extraNotes)]
+  return [...imported, ...buildEpisodes(state, {})]
 }
 
 export function getEpisodesSnapshot(): Episode[] {
   return [
     ...useLibraryStore.getState().imported,
-    ...buildEpisodes(useTestMode.getState(), useCaptureStore.getState().extraNotes)
+    ...buildEpisodes(useTestMode.getState(), {})
   ]
 }
 

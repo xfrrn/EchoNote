@@ -432,6 +432,10 @@ func episodeSummary(row db.ListLibraryEpisodesRow) EpisodeSummary {
 		publishedAt := row.PublishedAt.Time
 		response.PublishedAt = &publishedAt
 	}
+	if row.TranscriptionRunID.Valid {
+		value := formatUUID(row.TranscriptionRunID)
+		response.TranscriptionRunId = &value
+	}
 	return response
 }
 
@@ -457,6 +461,10 @@ func episodeDetail(detail repository.LibraryEpisodeDetail) EpisodeDetail {
 	if row.PublishedAt.Valid {
 		publishedAt := row.PublishedAt.Time
 		response.PublishedAt = &publishedAt
+	}
+	if row.TranscriptionRunID.Valid {
+		value := formatUUID(row.TranscriptionRunID)
+		response.TranscriptionRunId = &value
 	}
 	return response
 }

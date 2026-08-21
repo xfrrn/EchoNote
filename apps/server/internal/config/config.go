@@ -13,8 +13,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const defaultUserID = "00000000-0000-4000-8000-000000000001"
-
 type Config struct {
 	Environment        string
 	ServerPort         int
@@ -90,8 +88,10 @@ func Load() (Config, error) {
 		if cfg.PublicOrigin == "" {
 			return Config{}, fmt.Errorf("PUBLIC_ORIGIN is required in staging and production")
 		}
-	} else if err := cfg.DevelopmentUserID.Scan(envOrDefault("ECHONOTE_USER_ID", defaultUserID)); err != nil {
-		return Config{}, fmt.Errorf("ECHONOTE_USER_ID must be a UUID")
+	} else if developmentUserID != "" {
+		if err := cfg.DevelopmentUserID.Scan(developmentUserID); err != nil {
+			return Config{}, fmt.Errorf("ECHONOTE_USER_ID must be a UUID")
+		}
 	}
 	if cfg.PublicOrigin != "" {
 		origin, parseErr := url.Parse(cfg.PublicOrigin)

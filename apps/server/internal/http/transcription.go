@@ -163,6 +163,9 @@ func (s *Server) GetTranscriptionEvents(w http.ResponseWriter, r *http.Request, 
 	for {
 		events, listErr := s.transcriptions.Events(r.Context(), requestUserID(r), parsedRunID, afterID)
 		if listErr != nil {
+			if r.Context().Err() != nil {
+				return
+			}
 			s.logTranscriptionError(r, "stream transcription events", runID, listErr)
 			return
 		}
@@ -185,6 +188,9 @@ func (s *Server) GetTranscriptionEvents(w http.ResponseWriter, r *http.Request, 
 		case <-ticker.C:
 			run, err = s.transcriptions.Get(r.Context(), requestUserID(r), parsedRunID)
 			if err != nil {
+				if r.Context().Err() != nil {
+					return
+				}
 				s.logTranscriptionError(r, "refresh transcription events", runID, err)
 				return
 			}

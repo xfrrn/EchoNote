@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronLeft, Search } from 'lucide-react'
-import { useTestMode } from '../../shared/store/test-mode'
+import { useThemeStore } from '../../shared/store/theme'
 import { SegmentedControl } from '../../shared/components/SegmentedControl'
 import { Sheet } from '../../shared/components/Sheet'
 import { EpisodeRow } from '../library/EpisodeRow'
@@ -12,8 +12,8 @@ import { BottomNav } from '../../app/layout/BottomNav'
 import { ShowCover } from '../../shared/components/ShowCover'
 import { EchoMark } from '../../shared/components/EchoMark'
 import { Waveform } from '../../shared/components/Waveform'
-import { getEpisodesSnapshot, getSpeaker } from '../../shared/mock/episodes'
-import type { Note, SearchResultItem, TranscriptSegment } from '../../shared/types'
+import { getEpisodesSnapshot } from '../../shared/mock/episodes'
+import type { EpisodeSummary, Note, SearchResult, TranscriptSegment, TranscriptSpeaker } from '../../shared/api/client'
 
 const colorTokens = [
   { name: '--bg-primary', className: 'bg-canvas', text: 'text-ink' },
@@ -40,24 +40,28 @@ const typeScale = [
 
 const sampleNote: Note = {
   id: 'design-note',
-  createdAt: '19:45',
-  text: '260 个步骤这个案例值得重点整理'
+  episode_id: 'e1',
+  client_note_id: 'design-client-note',
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+  content: '260 个步骤这个案例值得重点整理'
 }
 
 const sampleSegment: TranscriptSegment = {
   id: 'design-transcript',
-  speakerId: 'peng',
-  timestamp: '00:32:18',
-  text: '其实我们当时遇到的问题是，企业的软件系统已经非常复杂，AI 真正进入企业之后，最难的不是模型能力，而是它能不能被业务现场真正理解。'
+  speaker_id: 'peng', sequence: 1, start_ms: 1_938_000, end_ms: 1_945_000,
+  text: '其实我们当时遇到的问题是，企业的软件系统已经非常复杂，AI 真正进入企业之后，最难的不是模型能力，而是它能不能被业务现场真正理解。',
+  words: [], source_chunk_id: 'design-chunk'
 }
 
-const sampleSearchResult: SearchResultItem = {
-  kind: 'transcript',
-  episodeId: 'e1',
-  episodeTitle: 'E248｜一个“催发货”AI要跑通260步，和阿里瓴羊朋新宇聊聊中国式FDE',
-  showTitle: '硅谷101',
+const sampleSpeaker: TranscriptSpeaker = { id: 'peng', stable_key: 'peng', display_name: '朋新宇', role: 'guest', created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+
+const sampleSearchResult: SearchResult = {
+  id: 'design-search', document_type: 'transcript', source_id: sampleSegment.id, episode_id: 'e1',
+  episode_title: 'E248｜一个“催发货”AI要跑通260步，和阿里瓴羊朋新宇聊聊中国式FDE',
+  podcast_title: '硅谷101',
   snippet: 'FDE 真正进入企业以后，需要处理的不是单个模型调用，而是围绕流程、权限、异常和人的一整套工程。',
-  meta: '朋新宇 · 00:32:18'
+  speaker_name: '朋新宇', start_ms: 1_938_000, score: 1
 }
 
 function PlaygroundTitle({ children }: { children: string }) {
@@ -65,12 +69,17 @@ function PlaygroundTitle({ children }: { children: string }) {
 }
 
 export function DesignPlaygroundPage() {
-  const theme = useTestMode((state) => state.theme)
-  const setTheme = useTestMode((state) => state.setTheme)
+  const theme = useThemeStore((state) => state.theme)
+  const setTheme = useThemeStore((state) => state.setTheme)
   const [segmentValue, setSegmentValue] = useState('notes')
   const [sheetOpen, setSheetOpen] = useState(false)
-  const episode = getEpisodesSnapshot()[0]
-  const speaker = getSpeaker(sampleSegment.speakerId)
+  const mockEpisode = getEpisodesSnapshot()[0]
+  const episode: EpisodeSummary | undefined = mockEpisode ? {
+    id: mockEpisode.id, title: mockEpisode.episodeTitle, duration_ms: mockEpisode.durationMin * 60_000,
+    cover_url: '', resolve_status: 'completed', transcription_status: 'completed', ai_status: 'completed',
+    source_count: 1, note_count: mockEpisode.notes.length, created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    podcast: { id: 'design-podcast', title: mockEpisode.showTitle, author: '', description: '', cover_url: '' }
+  } : undefined
 
   return (
     <div className="safe-top safe-sides app-viewport w-full bg-canvas text-ink">
@@ -262,22 +271,22 @@ export function DesignPlaygroundPage() {
         </div>
 
         <PlaygroundTitle>Episode Row</PlaygroundTitle>
-        <div className="mt-2 divide-y divide-hairline">{episode ? <EpisodeRow episode={episode} /> : null}</div>
+        <div className="mt-2 divide-y divide-hairline">{episode ? <EpisodeRow episode={episode} deleting={false} onDelete={() => undefined} /> : null}</div>
 
         <PlaygroundTitle>Note Item</PlaygroundTitle>
         <div className="mt-2 divide-y divide-hairline">
-          <NoteItem note={sampleNote} />
+          <NoteItem note={sampleNote} onSave={async () => undefined} onDelete={() => undefined} busy={false} />
         </div>
 
         <PlaygroundTitle>Transcript Segment</PlaygroundTitle>
         <div className="mt-2">
           <p className="px-4 pb-2 text-caption text-ink-tertiary">
-            当前 Speaker：{speaker.name}；正文衬线 17px / 1.78，署名用色点区分说话人。
+            当前 Speaker：{sampleSpeaker.display_name}；正文衬线 17px / 1.78，署名用色点区分说话人。
           </p>
           <div>
-            <TranscriptSegmentItem segment={sampleSegment} showSpeaker />
+            <TranscriptSegmentItem segment={sampleSegment} speaker={sampleSpeaker} showSpeaker />
             <TranscriptSegmentItem
-              segment={{ ...sampleSegment, id: 'design-transcript-2', text: '同一位说话人的连续段落，不重复署名，只靠留白分段。' }}
+              segment={{ ...sampleSegment, id: 'design-transcript-2', text: '同一位说话人的连续段落，不重复署名，只靠留白分段。' }} speaker={sampleSpeaker}
               showSpeaker={false}
             />
           </div>

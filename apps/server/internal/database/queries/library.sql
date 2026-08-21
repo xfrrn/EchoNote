@@ -28,7 +28,15 @@ SELECT
         WHERE note.episode_id = episode.id
           AND note.user_id = episode.user_id
           AND note.deleted_at IS NULL
-    )::bigint AS note_count
+    )::bigint AS note_count,
+    (
+        SELECT run.id
+        FROM transcription_runs AS run
+        WHERE run.episode_id = episode.id
+          AND run.user_id = episode.user_id
+        ORDER BY run.created_at DESC, run.id DESC
+        LIMIT 1
+    ) AS transcription_run_id
 FROM episodes AS episode
 LEFT JOIN podcasts AS podcast
   ON podcast.id = episode.podcast_id
@@ -67,7 +75,15 @@ SELECT
         FROM episode_sources AS source
         WHERE source.episode_id = episode.id
           AND source.user_id = episode.user_id
-    )::bigint AS source_count
+    )::bigint AS source_count,
+    (
+        SELECT run.id
+        FROM transcription_runs AS run
+        WHERE run.episode_id = episode.id
+          AND run.user_id = episode.user_id
+        ORDER BY run.created_at DESC, run.id DESC
+        LIMIT 1
+    ) AS transcription_run_id
 FROM episodes AS episode
 LEFT JOIN podcasts AS podcast
   ON podcast.id = episode.podcast_id

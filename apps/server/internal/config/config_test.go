@@ -97,6 +97,19 @@ func TestLoadRejectsInvalidUserID(t *testing.T) {
 	}
 }
 
+func TestLoadAllowsSessionAuthInDevelopment(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://localhost/echonote")
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("ECHONOTE_USER_ID", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.DevelopmentUserID.Valid {
+		t.Fatal("expected development identity fallback to be opt-in")
+	}
+}
+
 func TestLoadRejectsProductionDevelopmentIdentity(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://localhost/echonote?sslmode=verify-full")
 	t.Setenv("APP_ENV", "production")

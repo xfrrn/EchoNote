@@ -2020,6 +2020,8 @@ components:
           $ref: "#/components/schemas/ResolveStatus"
         transcription_status:
           $ref: "#/components/schemas/ProcessingStatus"
+        transcription_run_id:
+          type: string
         ai_status:
           $ref: "#/components/schemas/ProcessingStatus"
         source_count:
@@ -2099,6 +2101,8 @@ components:
           $ref: "#/components/schemas/ResolveStatus"
         transcription_status:
           $ref: "#/components/schemas/ProcessingStatus"
+        transcription_run_id:
+          type: string
         ai_status:
           $ref: "#/components/schemas/ProcessingStatus"
         source_count:

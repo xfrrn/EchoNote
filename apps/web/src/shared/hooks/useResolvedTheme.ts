@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useTestMode, type ThemeMode } from '../store/test-mode'
+import { useThemeStore, type ThemeMode } from '../store/theme'
 
 function systemDark(): boolean {
   return window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -29,7 +29,7 @@ export function syncAppleLaunchScreen(mode: ThemeMode, resolved: 'light' | 'dark
 }
 
 export function useResolvedTheme(): 'light' | 'dark' {
-  const theme = useTestMode((state) => state.theme)
+  const theme = useThemeStore((state) => state.theme)
   const [systemDarkState, setSystemDarkState] = useState(systemDark)
 
   useEffect(() => {
@@ -44,7 +44,7 @@ export function useResolvedTheme(): 'light' | 'dark' {
 }
 
 export function useThemeSync(): void {
-  const theme = useTestMode((state) => state.theme)
+  const theme = useThemeStore((state) => state.theme)
   const resolved = useResolvedTheme()
 
   useEffect(() => {

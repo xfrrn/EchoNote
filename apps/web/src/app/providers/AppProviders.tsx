@@ -1,12 +1,13 @@
 import type { PropsWithChildren } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useThemeSync } from '../../shared/hooks/useResolvedTheme'
+import { OutboxSync } from '../../shared/outbox/OutboxSync'
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: false,
-      staleTime: Infinity
+      retry: 1,
+      staleTime: 30_000
     }
   }
 })
@@ -30,6 +31,7 @@ export function AppProviders({ children }: PropsWithChildren) {
     <QueryClientProvider client={queryClient}>
       <ThemeSync />
       <ViewportChrome />
+      <OutboxSync />
       {children}
     </QueryClientProvider>
   )

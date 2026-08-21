@@ -615,6 +615,7 @@ type EpisodeDetail struct {
 	SourceCount         int64            `json:"source_count"`
 	Sources             []EpisodeSource  `json:"sources"`
 	Title               string           `json:"title"`
+	TranscriptionRunId  *string          `json:"transcription_run_id,omitempty"`
 	TranscriptionStatus ProcessingStatus `json:"transcription_status"`
 	UpdatedAt           time.Time        `json:"updated_at"`
 }
@@ -651,6 +652,7 @@ type EpisodeSummary struct {
 	ResolveStatus       ResolveStatus    `json:"resolve_status"`
 	SourceCount         int64            `json:"source_count"`
 	Title               string           `json:"title"`
+	TranscriptionRunId  *string          `json:"transcription_run_id,omitempty"`
 	TranscriptionStatus ProcessingStatus `json:"transcription_status"`
 	UpdatedAt           time.Time        `json:"updated_at"`
 }

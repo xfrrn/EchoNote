@@ -3,24 +3,28 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  server: {
+    proxy: {
+      '/api': 'http://[::1]:8080'
+    }
+  },
+  preview: {
+    proxy: {
+      '/api': 'http://[::1]:8080'
+    }
+  },
   plugins: [
     react(),
     VitePWA({
       // 开发模式不注入/缓存 SW，避免干扰 UI 调试；生产构建仍会完整生成 PWA。
       disable: process.env.NODE_ENV === 'development',
       registerType: 'autoUpdate',
-      includeAssets: [
-        'icons/apple-touch-icon.png',
-        'icons/favicon.svg',
-        'icons/apple-splash-light-*.png',
-        'icons/apple-splash-dark-*.png',
-        'manifest.webmanifest',
-        'manifest-dark.webmanifest'
-      ],
       manifest: false,
       workbox: {
+        // API、SSE 与登录走网络；导航只回退到随 Service Worker revision 更新的静态壳。
         globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest}'],
         navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/api\//],
         cleanupOutdatedCaches: true
       },
       devOptions: {

@@ -2,12 +2,17 @@
   "name": "echonote",
   "private": true,
   "version": "0.1.0",
+  "packageManager": "pnpm@10.33.3",
   "type": "module",
   "description": "EchoNote — 智能听闻笔记本（Monorepo：Web 前端 + Go 后端）",
   "scripts": {
     "dev": "pnpm --filter web dev",
     "build": "pnpm --filter web build",
     "preview": "pnpm --filter web preview",
-    "generate:icons": "pnpm --filter web generate:icons"
+    "generate:icons": "pnpm --filter web generate:icons",
+    "generate:contracts": "openapi-typescript apps/server/openapi/openapi.yaml -o packages/contracts/src/schema.ts"
+  },
+  "devDependencies": {
+    "openapi-typescript": "7.13.0"
   }
 }
