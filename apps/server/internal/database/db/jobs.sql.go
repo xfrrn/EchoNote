@@ -317,6 +317,51 @@ func (q *Queries) ListJobEvents(ctx context.Context, jobID pgtype.UUID) ([]JobEv
 	return items, nil
 }
 
+const manualRetryCleanupJob = `-- name: ManualRetryCleanupJob :one
+UPDATE jobs
+SET status = 'queued',
+    stage = 'manual_retry',
+    attempt = 0,
+    run_after = now(),
+    locked_by = NULL,
+    locked_at = NULL,
+    error_code = NULL,
+    error_message = NULL,
+    updated_at = now(),
+    completed_at = NULL
+WHERE id = $1
+  AND type = 'cleanup_audio'
+  AND status = 'failed'
+RETURNING id, user_id, type, entity_type, entity_id, payload, status, stage, priority, attempt, max_attempts, run_after, locked_by, locked_at, error_code, error_message, created_at, updated_at, completed_at
+`
+
+func (q *Queries) ManualRetryCleanupJob(ctx context.Context, jobID pgtype.UUID) (Job, error) {
+	row := q.db.QueryRow(ctx, manualRetryCleanupJob, jobID)
+	var i Job
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Type,
+		&i.EntityType,
+		&i.EntityID,
+		&i.Payload,
+		&i.Status,
+		&i.Stage,
+		&i.Priority,
+		&i.Attempt,
+		&i.MaxAttempts,
+		&i.RunAfter,
+		&i.LockedBy,
+		&i.LockedAt,
+		&i.ErrorCode,
+		&i.ErrorMessage,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
+	)
+	return i, err
+}
+
 const requeueStaleJobs = `-- name: RequeueStaleJobs :many
 UPDATE jobs
 SET status = CASE WHEN attempt < max_attempts THEN 'queued' ELSE 'failed' END,

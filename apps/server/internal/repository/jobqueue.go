@@ -13,7 +13,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var ErrJobLeaseLost = errors.New("job lease lost")
+var (
+	ErrJobLeaseLost           = errors.New("job lease lost")
+	ErrCleanupJobNotRetryable = errors.New("cleanup job is not failed or does not exist")
+)
 
 type NewJob struct {
 	UserID      pgtype.UUID
@@ -205,6 +208,26 @@ func (q *JobQueue) RequeueStale(ctx context.Context, leaseTimeout time.Duration)
 		return 0, fmt.Errorf("requeue stale jobs: %w", err)
 	}
 	return len(jobs), nil
+}
+
+func (q *JobQueue) RetryFailedCleanup(ctx context.Context, jobID pgtype.UUID) (db.Job, error) {
+	job, err := withTx(ctx, q.pool, func(queries *db.Queries) (db.Job, error) {
+		job, err := queries.ManualRetryCleanupJob(ctx, jobID)
+		if err != nil {
+			return db.Job{}, err
+		}
+		if err := createEvent(ctx, queries, job, "manual_retry"); err != nil {
+			return db.Job{}, err
+		}
+		return job, nil
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return db.Job{}, ErrCleanupJobNotRetryable
+	}
+	if err != nil {
+		return db.Job{}, fmt.Errorf("retry failed cleanup job: %w", err)
+	}
+	return job, nil
 }
 
 func createEvent(ctx context.Context, queries *db.Queries, job db.Job, eventType string) error {

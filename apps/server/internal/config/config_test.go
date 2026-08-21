@@ -170,3 +170,89 @@ func TestLoadRejectsInsecureLLMEndpoint(t *testing.T) {
 		t.Fatal("expected insecure LLM_ENDPOINT to fail")
 	}
 }
+
+func TestProductionServiceValidation(t *testing.T) {
+	setSecureEnvironment(t)
+	t.Setenv("EMBEDDING_PROVIDER", "aliyun")
+	t.Setenv("EMBEDDING_API_KEY", "embedding-test-key")
+	t.Setenv("LLM_PROVIDER", "aliyun")
+	t.Setenv("LLM_API_KEY", "llm-test-key")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.ValidateAPI(); err != nil {
+		t.Fatalf("API config: %v", err)
+	}
+	if err := cfg.ValidateWorker(); err == nil {
+		t.Fatal("expected worker config without ASR and storage secrets to fail")
+	}
+
+	t.Setenv("ASR_PROVIDER", "aliyun")
+	t.Setenv("ASR_API_KEY", "asr-test-key")
+	t.Setenv("STORAGE_PROVIDER", "aliyun_oss")
+	t.Setenv("STORAGE_REGION", "cn-beijing")
+	t.Setenv("STORAGE_BUCKET", "echonote-production")
+	t.Setenv("STORAGE_ACCESS_KEY", "storage-test-id")
+	t.Setenv("STORAGE_SECRET_KEY", "storage-test-secret")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.ValidateWorker(); err != nil {
+		t.Fatalf("worker config: %v", err)
+	}
+	if cfg.ListenAddress() != "127.0.0.1:8080" || cfg.WorkerTempMaxAge != 24*time.Hour {
+		t.Fatalf("unexpected production defaults: address=%q temp_age=%s", cfg.ListenAddress(), cfg.WorkerTempMaxAge)
+	}
+}
+
+func TestLoadRejectsUnsafeProductionDatabase(t *testing.T) {
+	cases := map[string]string{
+		"placeholder": "postgres://echonote_api:CHANGE_ME@db.example.com/echonote?sslmode=verify-full&pool_max_conns=10",
+		"superuser":   "postgres://postgres@db.example.com/echonote?sslmode=verify-full&pool_max_conns=10",
+		"weak TLS":    "postgres://echonote_api@db.example.com/echonote?sslmode=require&pool_max_conns=10",
+		"no budget":   "postgres://echonote_api@db.example.com/echonote?sslmode=verify-full&pool_max_conns=20",
+		"wrong DB":    "postgres://echonote_api@db.example.com/autoup?sslmode=verify-full&pool_max_conns=10",
+	}
+	for name, databaseURL := range cases {
+		t.Run(name, func(t *testing.T) {
+			setSecureEnvironment(t)
+			t.Setenv("DATABASE_URL", databaseURL)
+			if _, err := Load(); err == nil {
+				t.Fatal("expected unsafe production DATABASE_URL to fail")
+			}
+		})
+	}
+}
+
+func TestProductionValidationRejectsPlaceholderProviderKey(t *testing.T) {
+	setSecureEnvironment(t)
+	t.Setenv("EMBEDDING_PROVIDER", "aliyun")
+	t.Setenv("EMBEDDING_API_KEY", "CHANGE_ME")
+	t.Setenv("LLM_PROVIDER", "aliyun")
+	t.Setenv("LLM_API_KEY", "llm-test-key")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.ValidateAPI(); err == nil {
+		t.Fatal("expected placeholder Provider key to fail")
+	}
+}
+
+func setSecureEnvironment(t *testing.T) {
+	t.Helper()
+	for _, key := range []string{"ASR_PROVIDER", "ASR_API_KEY", "STORAGE_PROVIDER", "STORAGE_REGION", "STORAGE_BUCKET", "STORAGE_ACCESS_KEY", "STORAGE_SECRET_KEY", "EMBEDDING_PROVIDER", "EMBEDDING_API_KEY", "LLM_PROVIDER", "LLM_API_KEY"} {
+		t.Setenv(key, "")
+	}
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("PUBLIC_ORIGIN", "https://notes.example.com")
+	t.Setenv("SERVER_HOST", "127.0.0.1")
+	t.Setenv("DATABASE_URL", "postgres://echonote_api@db.example.com/echonote?sslmode=verify-full&pool_max_conns=10")
+	t.Setenv("EXPECTED_DATABASE_NAME", "echonote")
+	t.Setenv("DATABASE_CONNECTION_BUDGET", "20")
+	t.Setenv("TRANSCRIPTION_ENABLED", "true")
+	t.Setenv("ECHONOTE_USER_ID", "")
+}

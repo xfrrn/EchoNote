@@ -45,7 +45,8 @@ jobs:
         working-directory: apps/server
       - run: pnpm generate:contracts
       - run: git diff --exit-code
-      - run: go test ./...
+      # Integration packages share one disposable database, so keep package tests serial.
+      - run: go test -p 1 ./...
         working-directory: apps/server
       - run: go vet ./...
         working-directory: apps/server

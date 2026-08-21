@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -463,6 +464,35 @@ func temporaryFile(pattern string) (string, func(), error) {
 		return "", nil, err
 	}
 	return name, func() { _ = os.Remove(name) }, nil
+}
+
+func CleanupTemporaryFiles(directory string, olderThan time.Time) (int, error) {
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return 0, err
+	}
+	removed := 0
+	var result error
+	// ponytail: the age fence assumes one worker host; use per-worker directories before horizontal scaling.
+	for _, entry := range entries {
+		if !entry.Type().IsRegular() || !strings.HasPrefix(entry.Name(), "echonote-") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			result = errors.Join(result, err)
+			continue
+		}
+		if !info.ModTime().Before(olderThan) {
+			continue
+		}
+		if err := os.Remove(filepath.Join(directory, entry.Name())); err != nil {
+			result = errors.Join(result, err)
+			continue
+		}
+		removed++
+	}
+	return removed, result
 }
 
 func putFile(ctx context.Context, store domain.ObjectStore, key, filePath string) error {

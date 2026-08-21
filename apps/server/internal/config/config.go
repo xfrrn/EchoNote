@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"net"
 	"net/url"
 	"os"
 	"sort"
@@ -15,14 +16,18 @@ import (
 
 type Config struct {
 	Environment        string
+	ServerHost         string
 	ServerPort         int
 	DatabaseURL        string
+	ExpectedDatabase   string
+	DatabaseBudget     int
 	PublicOrigin       string
 	LogLevel           slog.Level
 	SessionTTL         time.Duration
 	PasswordBcryptCost int
 	WorkerPollInterval time.Duration
 	WorkerLeaseTimeout time.Duration
+	WorkerTempMaxAge   time.Duration
 	ASRPollInterval    time.Duration
 	ASRProvider        string
 	ASRAPIKey          string
@@ -42,17 +47,21 @@ type Config struct {
 	StorageSecretKey   string
 	FFmpegPath         string
 	FFprobePath        string
+	TranscriptionAPI   bool
 	DevelopmentUserID  pgtype.UUID
 }
 
 func Load() (Config, error) {
 	cfg := Config{
 		Environment:        envOrDefault("APP_ENV", "development"),
+		ServerHost:         strings.TrimSpace(os.Getenv("SERVER_HOST")),
 		DatabaseURL:        strings.TrimSpace(os.Getenv("DATABASE_URL")),
+		ExpectedDatabase:   strings.TrimSpace(os.Getenv("EXPECTED_DATABASE_NAME")),
 		PublicOrigin:       strings.TrimSuffix(strings.TrimSpace(os.Getenv("PUBLIC_ORIGIN")), "/"),
 		SessionTTL:         30 * 24 * time.Hour,
 		WorkerPollInterval: time.Second,
 		WorkerLeaseTimeout: 5 * time.Minute,
+		WorkerTempMaxAge:   24 * time.Hour,
 		ASRPollInterval:    5 * time.Second,
 		ASRProvider:        strings.ToLower(strings.TrimSpace(os.Getenv("ASR_PROVIDER"))),
 		ASRAPIKey:          strings.TrimSpace(os.Getenv("ASR_API_KEY")),
@@ -101,6 +110,16 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("PUBLIC_ORIGIN must be an HTTPS origin without credentials or a path")
 		}
 	}
+	if cfg.SecureEnvironment() {
+		budget, err := strconv.Atoi(strings.TrimSpace(os.Getenv("DATABASE_CONNECTION_BUDGET")))
+		if err != nil || budget < 2 {
+			return Config{}, fmt.Errorf("DATABASE_CONNECTION_BUDGET must be an integer greater than 1")
+		}
+		cfg.DatabaseBudget = budget
+		if err := validateSecureDatabaseURL(cfg.DatabaseURL, cfg.ExpectedDatabase, budget); err != nil {
+			return Config{}, err
+		}
+	}
 
 	port, err := strconv.Atoi(envOrDefault("SERVER_PORT", "8080"))
 	if err != nil || port < 1 || port > 65535 {
@@ -124,6 +143,9 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if cfg.WorkerLeaseTimeout, err = positiveDuration("WORKER_LEASE_TIMEOUT", cfg.WorkerLeaseTimeout); err != nil {
+		return Config{}, err
+	}
+	if cfg.WorkerTempMaxAge, err = positiveDuration("WORKER_TEMP_MAX_AGE", cfg.WorkerTempMaxAge); err != nil {
 		return Config{}, err
 	}
 	if cfg.ASRPollInterval, err = positiveDuration("ASR_POLL_INTERVAL", cfg.ASRPollInterval); err != nil {
@@ -165,12 +187,65 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("LLM_ENDPOINT must be an HTTPS URL without credentials")
 		}
 	}
+	rawTranscriptionAPI := strings.TrimSpace(os.Getenv("TRANSCRIPTION_ENABLED"))
+	if rawTranscriptionAPI == "" {
+		if cfg.SecureEnvironment() {
+			return Config{}, fmt.Errorf("TRANSCRIPTION_ENABLED is required in staging and production")
+		}
+		cfg.TranscriptionAPI = cfg.TranscriptionEnabled()
+	} else {
+		cfg.TranscriptionAPI, err = strconv.ParseBool(rawTranscriptionAPI)
+		if err != nil {
+			return Config{}, fmt.Errorf("TRANSCRIPTION_ENABLED must be true or false")
+		}
+	}
 
 	return cfg, nil
 }
 
-func (cfg Config) SecureCookies() bool {
+func (cfg Config) SecureEnvironment() bool {
 	return cfg.Environment == "staging" || cfg.Environment == "production"
+}
+
+func (cfg Config) SecureCookies() bool {
+	return cfg.SecureEnvironment()
+}
+
+func (cfg Config) ListenAddress() string {
+	if cfg.ServerHost == "" {
+		return ":" + strconv.Itoa(cfg.ServerPort)
+	}
+	return net.JoinHostPort(cfg.ServerHost, strconv.Itoa(cfg.ServerPort))
+}
+
+func (cfg Config) ValidateAPI() error {
+	if !cfg.SecureEnvironment() {
+		return nil
+	}
+	host := net.ParseIP(cfg.ServerHost)
+	if host == nil || !host.IsLoopback() {
+		return fmt.Errorf("SERVER_HOST must be a loopback IP in staging and production")
+	}
+	if !cfg.TranscriptionAPI {
+		return fmt.Errorf("TRANSCRIPTION_ENABLED must be true in staging and production")
+	}
+	if err := cfg.ValidateEmbedding(); err != nil {
+		return err
+	}
+	return cfg.ValidateLLM()
+}
+
+func (cfg Config) ValidateWorker() error {
+	if !cfg.SecureEnvironment() {
+		return nil
+	}
+	if err := cfg.ValidateTranscription(); err != nil {
+		return err
+	}
+	if err := cfg.ValidateEmbedding(); err != nil {
+		return err
+	}
+	return cfg.ValidateLLM()
 }
 
 func (cfg Config) ValidateTranscription() error {
@@ -183,6 +258,15 @@ func (cfg Config) ValidateTranscription() error {
 	} {
 		if value == "" {
 			missing = append(missing, key)
+		}
+	}
+	if cfg.SecureEnvironment() {
+		for key, value := range map[string]string{
+			"ASR_API_KEY": cfg.ASRAPIKey, "STORAGE_ACCESS_KEY": cfg.StorageAccessKey, "STORAGE_SECRET_KEY": cfg.StorageSecretKey,
+		} {
+			if placeholder(value) {
+				missing = append(missing, key)
+			}
 		}
 	}
 	if len(missing) > 0 {
@@ -204,6 +288,9 @@ func (cfg Config) ValidateEmbedding() error {
 	if cfg.EmbeddingAPIKey == "" {
 		missing = append(missing, "EMBEDDING_API_KEY")
 	}
+	if cfg.SecureEnvironment() && placeholder(cfg.EmbeddingAPIKey) {
+		missing = append(missing, "EMBEDDING_API_KEY")
+	}
 	if len(missing) > 0 {
 		return fmt.Errorf("semantic search requires %s", strings.Join(missing, ", "))
 	}
@@ -220,6 +307,9 @@ func (cfg Config) ValidateLLM() error {
 		missing = append(missing, "LLM_PROVIDER")
 	}
 	if cfg.LLMAPIKey == "" {
+		missing = append(missing, "LLM_API_KEY")
+	}
+	if cfg.SecureEnvironment() && placeholder(cfg.LLMAPIKey) {
 		missing = append(missing, "LLM_API_KEY")
 	}
 	if len(missing) > 0 {
@@ -246,4 +336,37 @@ func positiveDuration(key string, fallback time.Duration) (time.Duration, error)
 		return 0, fmt.Errorf("%s must be a positive Go duration", key)
 	}
 	return duration, nil
+}
+
+func validateSecureDatabaseURL(raw, expectedDatabase string, budget int) error {
+	parsed, err := url.Parse(raw)
+	if err != nil || (parsed.Scheme != "postgres" && parsed.Scheme != "postgresql") || parsed.Host == "" {
+		return fmt.Errorf("DATABASE_URL must be a PostgreSQL URL in staging and production")
+	}
+	if parsed.User == nil || parsed.User.Username() == "" || strings.EqualFold(parsed.User.Username(), "postgres") {
+		return fmt.Errorf("DATABASE_URL must use a named non-postgres role in staging and production")
+	}
+	if password, ok := parsed.User.Password(); ok && placeholder(password) {
+		return fmt.Errorf("DATABASE_URL must not contain a placeholder password")
+	}
+	if expectedDatabase != "echonote" && !strings.HasPrefix(expectedDatabase, "echonote_") {
+		return fmt.Errorf("EXPECTED_DATABASE_NAME must be echonote or start with echonote_")
+	}
+	if strings.TrimPrefix(parsed.Path, "/") != expectedDatabase {
+		return fmt.Errorf("DATABASE_URL database must match EXPECTED_DATABASE_NAME")
+	}
+	query := parsed.Query()
+	if query.Get("sslmode") != "verify-full" {
+		return fmt.Errorf("DATABASE_URL must set sslmode=verify-full in staging and production")
+	}
+	poolMax, err := strconv.Atoi(query.Get("pool_max_conns"))
+	if err != nil || poolMax < 1 || poolMax >= budget {
+		return fmt.Errorf("DATABASE_URL pool_max_conns must be positive and below DATABASE_CONNECTION_BUDGET")
+	}
+	return nil
+}
+
+func placeholder(value string) bool {
+	value = strings.TrimSpace(value)
+	return strings.EqualFold(value, "CHANGE_ME") || strings.EqualFold(value, "CHANGEME")
 }

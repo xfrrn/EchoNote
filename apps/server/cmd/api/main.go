@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 	"time"
 
@@ -25,16 +24,25 @@ import (
 )
 
 func main() {
-	if err := run(); err != nil {
+	if err := run(os.Args[1:]); err != nil {
 		slog.New(slog.NewJSONHandler(os.Stderr, nil)).Error("api exited", "service", "echonote-api", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run() error {
+func run(args []string) error {
+	if len(args) > 1 || len(args) == 1 && args[0] != "--check-config" {
+		return fmt.Errorf("usage: api [--check-config]")
+	}
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
+	}
+	if err := cfg.ValidateAPI(); err != nil {
+		return fmt.Errorf("validate API config: %w", err)
+	}
+	if len(args) == 1 {
+		return nil
 	}
 	logger := logging.New("echonote-api", cfg.Environment, cfg.LogLevel)
 
@@ -47,6 +55,11 @@ func run() error {
 		return err
 	}
 	defer pool.Close()
+	if cfg.SecureEnvironment() {
+		if err := database.ValidateRuntimeRole(ctx, pool, cfg.ExpectedDatabase); err != nil {
+			return err
+		}
+	}
 	authRepository := repository.NewAuthRepository(pool)
 	if err := authRepository.EnsurePlaceholderUser(ctx, cfg.DevelopmentUserID); err != nil {
 		return err
@@ -75,7 +88,7 @@ func run() error {
 	exportService := service.NewExportService(repository.NewExportRepository(pool))
 
 	server := &http.Server{
-		Addr: ":" + strconv.Itoa(cfg.ServerPort),
+		Addr: cfg.ListenAddress(),
 		Handler: httpapi.NewRouter(
 			pool,
 			repository.NewImportRepository(pool),
@@ -86,7 +99,7 @@ func run() error {
 			aiService,
 			exportService,
 			authRepository,
-			cfg.TranscriptionEnabled(),
+			cfg.TranscriptionAPI,
 			httpapi.AuthConfig{
 				PublicOrigin: cfg.PublicOrigin, SessionTTL: cfg.SessionTTL, PasswordCost: cfg.PasswordBcryptCost,
 				SecureCookies: cfg.SecureCookies(), DevelopmentUserID: cfg.DevelopmentUserID,

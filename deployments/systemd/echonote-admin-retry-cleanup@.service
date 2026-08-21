@@ -1,0 +1,37 @@
+[Unit]
+Description=Retry failed EchoNote cleanup job %i
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=echonote-maintenance
+Group=echonote-maintenance
+WorkingDirectory=/opt/echonote/current
+EnvironmentFile=/etc/echonote/common.env
+EnvironmentFile=/etc/echonote/maintenance.env
+ExecStart=/opt/echonote/current/bin/echonote-admin retry-cleanup %i
+TimeoutStartSec=2min
+UMask=0077
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectHostname=true
+ProtectClock=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+AmbientCapabilities=
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+ReadOnlyPaths=/tmp /var/tmp

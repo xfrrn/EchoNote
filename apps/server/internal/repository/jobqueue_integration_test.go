@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -122,6 +123,31 @@ func TestJobQueueLifecycle(t *testing.T) {
 	status, err = queue.RetryOrFail(ctx, permanentAttempt.ID, "worker-test", "PERMANENT", "do not retry", time.Millisecond, false)
 	if err != nil || status != "failed" {
 		t.Fatalf("permanent failure status=%q err=%v", status, err)
+	}
+	if _, err := queue.RetryFailedCleanup(ctx, permanentJob.ID); !errors.Is(err, ErrCleanupJobNotRetryable) {
+		t.Fatalf("expected non-cleanup retry rejection, got %v", err)
+	}
+
+	cleanupJob, err := queue.Enqueue(ctx, NewJob{
+		Type: CleanupAudioJobType, EntityType: "deleted_episode_audio", EntityID: randomUUID(t), MaxAttempts: 3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _, _ = pool.Exec(context.Background(), "DELETE FROM jobs WHERE id = $1", cleanupJob.ID) }()
+	if _, err := pool.Exec(ctx, "UPDATE jobs SET status = 'failed', stage = 'failed', attempt = 3, completed_at = now() WHERE id = $1", cleanupJob.ID); err != nil {
+		t.Fatal(err)
+	}
+	retriedCleanup, err := queue.RetryFailedCleanup(ctx, cleanupJob.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retriedCleanup.Status != "queued" || retriedCleanup.Stage != "manual_retry" || retriedCleanup.Attempt != 0 {
+		t.Fatalf("retried cleanup=%+v", retriedCleanup)
+	}
+	cleanupEvents, err := db.New(pool).ListJobEvents(ctx, cleanupJob.ID)
+	if err != nil || len(cleanupEvents) != 2 || cleanupEvents[1].EventType != "manual_retry" {
+		t.Fatalf("cleanup events=%+v err=%v", cleanupEvents, err)
 	}
 
 	pollJob, err := queue.Enqueue(ctx, NewJob{

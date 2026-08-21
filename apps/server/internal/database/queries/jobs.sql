@@ -137,6 +137,23 @@ SELECT *
 FROM jobs
 WHERE id = sqlc.arg(job_id);
 
+-- name: ManualRetryCleanupJob :one
+UPDATE jobs
+SET status = 'queued',
+    stage = 'manual_retry',
+    attempt = 0,
+    run_after = now(),
+    locked_by = NULL,
+    locked_at = NULL,
+    error_code = NULL,
+    error_message = NULL,
+    updated_at = now(),
+    completed_at = NULL
+WHERE id = sqlc.arg(job_id)
+  AND type = 'cleanup_audio'
+  AND status = 'failed'
+RETURNING *;
+
 -- name: ListJobEvents :many
 SELECT *
 FROM job_events

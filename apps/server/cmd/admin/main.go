@@ -28,13 +28,39 @@ func run(args []string) error {
 	if len(args) == 1 && args[0] == "benchmark-password" {
 		return benchmarkPassword()
 	}
-	if len(args) < 1 || !((args[0] == "create" || args[0] == "reset-password") && len(args) == 2 || args[0] == "claim" && len(args) == 3) {
+	if len(args) < 1 || !((args[0] == "create" || args[0] == "reset-password" || args[0] == "retry-cleanup") && len(args) == 2 || args[0] == "claim" && len(args) == 3) {
 		return usage()
 	}
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	pool, err := database.Open(ctx, cfg.DatabaseURL, "echonote-admin")
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	logger := logging.New("echonote-admin", cfg.Environment, cfg.LogLevel)
+	if args[0] == "retry-cleanup" {
+		if cfg.SecureEnvironment() {
+			if err := database.ValidateRuntimeRole(ctx, pool, cfg.ExpectedDatabase); err != nil {
+				return err
+			}
+		}
+		var jobID pgtype.UUID
+		if err := jobID.Scan(args[1]); err != nil {
+			return fmt.Errorf("job ID must be a UUID")
+		}
+		job, err := repository.NewJobQueue(pool).RetryFailedCleanup(ctx, jobID)
+		if err != nil {
+			return err
+		}
+		logger.Info("cleanup job queued for manual retry", "job_id", formatUUID(job.ID))
+		return nil
+	}
+
 	password, err := readPassword()
 	if err != nil {
 		return err
@@ -43,16 +69,7 @@ func run(args []string) error {
 	if err != nil {
 		return fmt.Errorf("password: %w", err)
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	pool, err := database.Open(ctx, cfg.DatabaseURL, "echonote-admin")
-	if err != nil {
-		return err
-	}
-	defer pool.Close()
 	authRepository := repository.NewAuthRepository(pool)
-	logger := logging.New("echonote-admin", cfg.Environment, cfg.LogLevel)
 
 	switch args[0] {
 	case "create":
@@ -134,7 +151,7 @@ func benchmarkPassword() error {
 }
 
 func usage() error {
-	return fmt.Errorf("usage: admin create <username> | claim <user-id> <username> | reset-password <username> | benchmark-password; password is read from terminal or stdin")
+	return fmt.Errorf("usage: admin create <username> | claim <user-id> <username> | reset-password <username> | retry-cleanup <job-id> | benchmark-password; passwords are read from terminal or stdin")
 }
 
 func formatUUID(id pgtype.UUID) string {
