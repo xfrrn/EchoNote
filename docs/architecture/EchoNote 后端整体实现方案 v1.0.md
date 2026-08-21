@@ -2,6 +2,8 @@
 
 > 实施记录：当前任务把原推荐“第二阶段”拆成独立的 Import、Library、Notes Phase。Import 的实际边界、数据库并发去重与安全策略见 [`phase-2-import.md`](phase-2-import.md)；Library 的查询、状态与删除语义见 [`phase-3-library.md`](phase-3-library.md)；Capture、离线幂等与 Notes 生命周期见 [`phase-4-notes.md`](phase-4-notes.md)；完整转录、Speaker 对齐、版本与云端任务恢复见 [`phase-5-transcription.md`](phase-5-transcription.md) 和 [`transcription.md`](transcription.md)；关键词、Embedding、pgvector、Hybrid Search 与重建语义见 [`phase-6-search.md`](phase-6-search.md)。
 
+> 生产就绪：Phase 1–8 完成只代表后端业务切片可运行，不代表产品已经可以直接上线。Auth、Web 真实数据、部署安全、真实云端与灾备的补全顺序及验收门槛见 [`production-readiness.md`](production-readiness.md)。
+
 ## 1. 后端定位
 
 EchoNote 不是播客播放器，其后端不负责：

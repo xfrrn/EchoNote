@@ -37,7 +37,7 @@ pnpm preview    # 预览构建产物
 
 ## 后端（Phase 8）
 
-`apps/server` 已完成基础设施、Apple Podcasts/RSS/直接音频导入、Episode Library、Capture/Notes、异步 Transcription/Transcript/Speaker、Hybrid Search、按需 AI Artifact、带可信引用的单期 SSE Conversation，以及 Markdown / Apple Notes Share Content Export。Web Demo 暂未从 Mock Data 切换到后端。
+`apps/server` 已完成基础设施、Apple Podcasts/RSS/直接音频导入、Episode Library、Capture/Notes、异步 Transcription/Transcript/Speaker、Hybrid Search、按需 AI Artifact、带可信引用的单期 SSE Conversation，以及 Markdown / Apple Notes Share Content Export。Web Demo 暂未从 Mock Data 切换到后端；生产发布前还需完成 Auth、真实 Web 接入、部署安全和灾备验收，详见 [生产就绪补全方案](docs/architecture/production-readiness.md)。
 
 ```bash
 cd apps/server
