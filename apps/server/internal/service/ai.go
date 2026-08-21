@@ -11,6 +11,7 @@ import (
 
 	"github.com/Actify/echonote/apps/server/internal/database/db"
 	aidomain "github.com/Actify/echonote/apps/server/internal/domain/ai"
+	"github.com/Actify/echonote/apps/server/internal/logging"
 	"github.com/Actify/echonote/apps/server/internal/repository"
 	workerapp "github.com/Actify/echonote/apps/server/internal/worker"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -123,6 +124,7 @@ func (service *AIService) PrepareChat(
 		service.failChat(userID, turn.Assistant.ID, "AI_CONTEXT_INVALID", "AI context could not be encoded")
 		return nil, err
 	}
+	ctx = logging.WithAttributes(ctx, "episode_id", turn.Conversation.EpisodeID.String(), "conversation_id", conversationID.String())
 	events, err := service.provider.StreamChat(ctx, aidomain.ChatRequest{Messages: messages, MaxTokens: chatMaxTokens})
 	if err != nil {
 		service.failChat(userID, turn.Assistant.ID, errorCode(err, "AI_PROVIDER_FAILED"), "AI provider failed to start")
@@ -244,6 +246,7 @@ func (workflow *AIWorkflow) generateArtifact(ctx context.Context, job db.Job) er
 		_ = workflow.repository.FailArtifact(ctx, generation.Artifact, failure.code, failure.message)
 		return failure
 	}
+	ctx = logging.WithAttributes(ctx, "episode_id", generation.Artifact.EpisodeID.String())
 	providerResult, err := workflow.provider.GenerateStructured(ctx, aidomain.StructuredGenerationRequest{
 		Messages: []aidomain.Message{
 			{Role: "system", Content: artifactSystemPrompt},
@@ -252,7 +255,14 @@ func (workflow *AIWorkflow) generateArtifact(ctx context.Context, job db.Job) er
 		MaxTokens: artifactMaxTokens,
 	})
 	if err != nil {
-		_ = workflow.repository.FailArtifact(ctx, generation.Artifact, errorCode(err, "AI_PROVIDER_FAILED"), "AI provider failed")
+		retryable := true
+		var classified interface{ Retryable() bool }
+		if errors.As(err, &classified) {
+			retryable = classified.Retryable()
+		}
+		if !retryable || job.Attempt >= job.MaxAttempts {
+			_ = workflow.repository.FailArtifact(ctx, generation.Artifact, errorCode(err, "AI_PROVIDER_FAILED"), "AI provider failed")
+		}
 		return err
 	}
 	artifact, err := aidomain.ValidateArtifact([]byte(providerResult.Content), generation.Input)

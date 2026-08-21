@@ -21,6 +21,19 @@ sudo journalctl -u "echonote-admin-retry-cleanup@<job-id>.service" -n 50 --no-pa
 
 Worker 每个进程一次只执行一个 Job，并按 Lease 的三分之一周期续租。Worker 异常终止后，其他 Worker 在 `WORKER_LEASE_TIMEOUT` 后重排 Job。检查 `JOB_LEASE_EXPIRED` Event、Provider task ID 和最终实体唯一约束，不能直接复制 Job。
 
+## 数据留存
+
+首次只运行系统范围 Dry Run，并把四个计数附到变更记录：
+
+```bash
+sudo systemd-run --quiet --wait --pipe --collect --uid=echonote-maintenance \
+  -p EnvironmentFile=/etc/echonote/common.env \
+  -p EnvironmentFile=/etc/echonote/maintenance.env \
+  /opt/echonote/current/bin/echonote-maintenance retention --dry-run
+```
+
+核对过期或撤销 Session 为 30 天、succeeded/canceled Job 为 30 天、failed Job 为 90 天；Job Event 随 Job 级联删除。统计获批后执行一次 `sudo systemctl start echonote-retention.service`，复核日志和业务读取，再用 `sudo systemctl enable --now echonote-retention.timer` 启用每日任务。命令没有普通 `--apply`，只有明确的 `--apply-system`；用户数据内容、Embedding、Transcript、Note、AI Artifact 与 raw ASR 不在此任务内删除。
+
 ## 证书与密钥
 
 - 每月运行 `certbot renew --dry-run`；证书剩余 21 天时告警。

@@ -1571,7 +1571,7 @@ SET status = 'generating',
 WHERE id = $1
   AND user_id = $2
   AND job_id = $3
-  AND status = 'queued'
+  AND status IN ('queued', 'generating')
 RETURNING id, user_id, episode_id, transcript_version_id, job_id, artifact_type, model, prompt_version, notes_revision, input_hash, status, result, search_text, error_code, error_message, input_tokens, output_tokens, created_at, updated_at, completed_at
 `
 

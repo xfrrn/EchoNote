@@ -154,7 +154,7 @@ func (repository *AIRepository) RequestArtifact(
 		payload, _ := json.Marshal(map[string]string{"input_hash": artifact.InputHash})
 		job, err := enqueue(ctx, queries, NewJob{
 			UserID: userID, Type: GenerateAIArtifactJobType, EntityType: AIArtifactEntity,
-			EntityID: artifact.ID, Payload: payload, MaxAttempts: 1,
+			EntityID: artifact.ID, Payload: payload, MaxAttempts: 3,
 		})
 		if err != nil {
 			return ArtifactSchedule{}, err

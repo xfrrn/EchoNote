@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Actify/echonote/apps/server/internal/database/db"
+	applogging "github.com/Actify/echonote/apps/server/internal/logging"
 	"github.com/Actify/echonote/apps/server/internal/repository"
 	"github.com/Actify/echonote/apps/server/internal/service"
 	"github.com/go-chi/chi/v5"
@@ -371,12 +372,12 @@ func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 			started := time.Now()
 			requestID := middleware.GetReqID(r.Context())
 			userID := formatUUID(requestUserID(r))
+			requestLog := logger.With("request_id", requestID, "user_id", userID)
+			r = r.WithContext(applogging.WithLogger(r.Context(), requestLog))
 			w.Header().Set("X-Request-ID", requestID)
 			wrapped := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 			next.ServeHTTP(wrapped, r)
-			logger.InfoContext(r.Context(), "http request",
-				"request_id", requestID,
-				"user_id", userID,
+			requestLog.InfoContext(r.Context(), "http request",
 				"method", r.Method,
 				"path", r.URL.Path,
 				"status", wrapped.Status(),

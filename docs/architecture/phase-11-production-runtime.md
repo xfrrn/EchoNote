@@ -15,7 +15,7 @@
 - `cmd/admin`、Job Queue：只允许人工重排失败的 `cleanup_audio` Job，并记录可审计 Event。
 - `deployments/nginx`：HTTPS、同域 API、SSE 无缓冲、静态缓存、安全头和登录/高成本写限速。
 - `deployments/systemd`：API、Worker、Migration 与 Maintenance cleanup retry 的独立非 root、只读文件系统单元。
-- `deployments/env`、`postgres`、`runbooks`、`scripts/smoke.sh`：无真实密钥的分离模板、最小权限授权、部署/迁移/回滚/维护和发布后 Smoke。
+- `deployments/env`、`postgres`、`runbooks`、`scripts/smoke.sh`：无真实密钥的分离模板、最小权限授权、Worker 身份表隔离、部署/迁移/回滚/维护和发布后 Smoke。
 
 ## 风险与边界
 

@@ -148,7 +148,7 @@ SET status = 'generating',
 WHERE id = sqlc.arg(artifact_id)
   AND user_id = sqlc.arg(user_id)
   AND job_id = sqlc.arg(job_id)
-  AND status = 'queued'
+  AND status IN ('queued', 'generating')
 RETURNING *;
 
 -- name: MarkAIArtifactStale :exec

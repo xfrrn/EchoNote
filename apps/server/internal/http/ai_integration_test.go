@@ -23,19 +23,33 @@ import (
 )
 
 type fakeLLMProvider struct {
-	artifact      string
-	segmentID     string
-	artifactCalls int
-	chatCalls     int
-	invalidNext   bool
+	artifact          string
+	segmentID         string
+	artifactCalls     int
+	chatCalls         int
+	invalidNext       bool
+	transientFailures int
 }
 
 func (*fakeLLMProvider) Model() string { return "fake-qwen-v1" }
 
 func (provider *fakeLLMProvider) GenerateStructured(context.Context, aidomain.StructuredGenerationRequest) (aidomain.StructuredGenerationResult, error) {
 	provider.artifactCalls++
+	if provider.transientFailures > 0 {
+		provider.transientFailures--
+		return aidomain.StructuredGenerationResult{}, transientLLMError{}
+	}
 	return aidomain.StructuredGenerationResult{Content: provider.artifact, Usage: aidomain.Usage{InputTokens: 120, OutputTokens: 40}}, nil
 }
+
+type transientLLMError struct{}
+
+func (transientLLMError) Error() string             { return "temporary provider failure" }
+func (transientLLMError) Code() string              { return "AI_PROVIDER_FAILED" }
+func (transientLLMError) Retryable() bool           { return true }
+func (transientLLMError) ProviderName() string      { return "fake_llm" }
+func (transientLLMError) ProviderOperation() string { return "generate" }
+func (transientLLMError) ProviderStatus() int       { return http.StatusTooManyRequests }
 
 func (provider *fakeLLMProvider) StreamChat(context.Context, aidomain.ChatRequest) (<-chan aidomain.ChatEvent, error) {
 	provider.chatCalls++
@@ -157,6 +171,39 @@ func TestAIArtifactAndConversationHTTP(t *testing.T) {
 	searchResult, err = searchService.Search(ctx, userID, "artifactonlytoken", "episode", episodeID, 10)
 	if err != nil || len(searchResult.Items) != 0 {
 		t.Fatalf("stale artifact remained searchable: result=%+v err=%v", searchResult, err)
+	}
+
+	provider.transientFailures = 1
+	response = serveAIRequest(router, http.MethodPost, artifactPath, "")
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("request retry artifact status=%d body=%s", response.Code, response.Body.String())
+	}
+	job, found, err = queue.Claim(ctx, "ai-test-worker", []string{repository.GenerateAIArtifactJobType})
+	if err != nil || !found {
+		t.Fatalf("claim retry artifact found=%t err=%v", found, err)
+	}
+	handler := service.NewAIWorkflow(aiRepository, provider).Handlers()[repository.GenerateAIArtifactJobType]
+	if err := handler(ctx, job); err == nil {
+		t.Fatal("transient provider failure was not returned")
+	}
+	if status, err := queue.RetryOrFail(ctx, job.ID, "ai-test-worker", "AI_PROVIDER_FAILED", "temporary provider failure", time.Millisecond, true); err != nil || status != "queued" {
+		t.Fatalf("retry artifact job status=%q err=%v", status, err)
+	}
+	time.Sleep(5 * time.Millisecond)
+	job, found, err = queue.Claim(ctx, "ai-test-worker", []string{repository.GenerateAIArtifactJobType})
+	if err != nil || !found {
+		t.Fatalf("reclaim retry artifact found=%t err=%v", found, err)
+	}
+	if err := handler(ctx, job); err != nil {
+		t.Fatal(err)
+	}
+	if err := queue.Complete(ctx, job.ID, "ai-test-worker"); err != nil {
+		t.Fatal(err)
+	}
+	response = serveAIRequest(router, http.MethodGet, artifactPath, "")
+	artifacts = AIArtifactList{}
+	if json.Unmarshal(response.Body.Bytes(), &artifacts) != nil || len(artifacts.Items) != 2 || string(artifacts.Items[0].Status) != "ready" {
+		t.Fatalf("retried artifact status=%d body=%s", response.Code, response.Body.String())
 	}
 
 	conversationBody := `{"scope":"episode","episode_id":"` + formatUUID(episodeID) + `"}`

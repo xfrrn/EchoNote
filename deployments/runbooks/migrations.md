@@ -16,7 +16,7 @@
 /opt/echonote/current/bin/echonote-migrate version
 ```
 
-要求版本等于仓库最新 Migration，`dirty=false`。随后使用独立测试数据库执行 `go test ./...`，不得连接 Production、Staging 或 `autoup`。
+要求版本等于仓库最新 Migration，`dirty=false`。随后使用独立测试数据库执行 `go test -p 1 ./...`；包级串行避免多个集成测试包争用同一任务队列。不得连接 Production、Staging 或 `autoup`。
 
 ## Production Up
 
@@ -25,7 +25,7 @@
 3. 切换 `current` 到新 Release，但暂不重启进程。
 4. `systemctl start echonote-migrate.service`。
 5. 读取 unit 日志并确认退出码为 0。
-6. 以 Migration Role 重跑 `runtime-grants.sql`。
+6. 以 Migration Role 重跑 `runtime-grants.sql`、`runtime-table-grants.sql` 和 `maintenance-grants.sql`。
 7. 重启 API/Worker；两者启动时会拒绝超级用户、错误数据库名、Schema CREATE 权限或缺失扩展。
 
 若 Migration 失败，恢复旧 symlink，保留当前数据库和失败证据。只有在独立恢复演练中才允许使用 `migrate down`; Production 禁止直接执行。

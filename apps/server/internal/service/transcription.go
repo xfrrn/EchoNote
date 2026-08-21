@@ -16,6 +16,7 @@ import (
 
 	"github.com/Actify/echonote/apps/server/internal/database/db"
 	domain "github.com/Actify/echonote/apps/server/internal/domain/transcription"
+	"github.com/Actify/echonote/apps/server/internal/logging"
 	"github.com/Actify/echonote/apps/server/internal/repository"
 	workerapp "github.com/Actify/echonote/apps/server/internal/worker"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -176,6 +177,7 @@ func (workflow *TranscriptionWorkflow) render(ctx context.Context, job db.Job) e
 	if chunk.PreparedObjectKey == nil {
 		return permanent("PREPARED_AUDIO_MISSING", "prepared audio object is missing", nil)
 	}
+	ctx = transcriptionLogContext(ctx, chunk.EpisodeID, chunk.TranscriptionRunID)
 	sourceURL, err := workflow.store.SignedURL(ctx, *chunk.PreparedObjectKey, signedURLTTL)
 	if err != nil {
 		return err
@@ -208,6 +210,7 @@ func (workflow *TranscriptionWorkflow) submit(ctx context.Context, job db.Job) e
 	if chunk.ObjectKey == nil {
 		return permanent("CHUNK_OBJECT_MISSING", "rendered chunk object is missing", nil)
 	}
+	ctx = transcriptionLogContext(ctx, chunk.EpisodeID, chunk.TranscriptionRunID)
 	audioURL, err := workflow.store.SignedURL(ctx, *chunk.ObjectKey, signedURLTTL)
 	if err != nil {
 		_ = workflow.repository.ResetSubmit(ctx, chunk.ID)
@@ -219,7 +222,8 @@ func (workflow *TranscriptionWorkflow) submit(ctx context.Context, job db.Job) e
 		return permanent("TRANSCRIPTION_CONFIG_INVALID", err.Error(), err)
 	}
 	task, err := workflow.asr.Submit(ctx, domain.Request{
-		AudioURL: audioURL, Model: chunk.Model, LanguageHint: config.LanguageHint, SpeakerCount: config.SpeakerCount,
+		AudioURL: audioURL, AudioDurationMS: chunk.RenderEndMs - chunk.RenderStartMs,
+		Model: chunk.Model, LanguageHint: config.LanguageHint, SpeakerCount: config.SpeakerCount,
 	})
 	if err != nil {
 		var ambiguous interface{ AmbiguousCost() bool }
@@ -243,6 +247,7 @@ func (workflow *TranscriptionWorkflow) poll(ctx context.Context, job db.Job) err
 	if chunk.ExternalTaskID == nil {
 		return permanent("ASR_TASK_ID_MISSING", "chunk has no external ASR task ID", nil)
 	}
+	ctx = transcriptionLogContext(ctx, chunk.EpisodeID, chunk.TranscriptionRunID)
 	status, err := workflow.asr.Poll(ctx, *chunk.ExternalTaskID)
 	if err != nil {
 		return err
@@ -284,6 +289,7 @@ func (workflow *TranscriptionWorkflow) ingest(ctx context.Context, job db.Job) e
 	if chunk.Status != "running" || chunk.ResultUrl == nil || chunk.DurationMs == nil {
 		return permanent("ASR_RESULT_NOT_READY", "chunk result is not ready for ingestion", nil)
 	}
+	ctx = transcriptionLogContext(ctx, chunk.EpisodeID, chunk.TranscriptionRunID)
 	result, err := workflow.asr.FetchResult(ctx, *chunk.ResultUrl)
 	if err != nil {
 		var classified interface{ Retryable() bool }
@@ -442,6 +448,10 @@ func decodeRunConfig(raw []byte) (repository.RunConfig, error) {
 
 func objectPrefix(userID, episodeID, runID pgtype.UUID) string {
 	return "users/" + userID.String() + "/episodes/" + episodeID.String() + "/transcription-runs/" + runID.String()
+}
+
+func transcriptionLogContext(ctx context.Context, episodeID, runID pgtype.UUID) context.Context {
+	return logging.WithAttributes(ctx, "episode_id", episodeID.String(), "transcription_run_id", runID.String())
 }
 
 func chunkFingerprint(audioHash string, chunk db.GetTranscriptionChunkForJobRow, config string) string {

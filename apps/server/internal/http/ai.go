@@ -159,6 +159,10 @@ func (s *Server) StreamConversationMessage(w http.ResponseWriter, r *http.Reques
 	case errors.Is(err, repository.ErrAIContextNotFound):
 		writeAPIError(w, http.StatusConflict, "AI_CONTEXT_NOT_FOUND", "no citable context was found")
 		return
+	case isProviderFailure(err):
+		s.logAIError(r, "prepare conversation message", err)
+		writeAPIError(w, http.StatusServiceUnavailable, "AI_PROVIDER_UNAVAILABLE", "AI provider is temporarily unavailable")
+		return
 	case err != nil:
 		s.logAIError(r, "prepare conversation message", err)
 		writeAPIError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
@@ -291,7 +295,33 @@ func aiSSEEvent(event service.ChatStreamEvent) (string, []byte, error) {
 }
 
 func (s *Server) logAIError(r *http.Request, operation string, err error) {
-	s.logger.ErrorContext(r.Context(), operation,
-		"request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(requestUserID(r)), "error", err,
-	)
+	attributes := []any{"request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(requestUserID(r))}
+	attributes = append(attributes, errorLogAttributes(err)...)
+	s.logger.ErrorContext(r.Context(), operation, attributes...)
+}
+
+func isProviderFailure(err error) bool {
+	var provider interface{ ProviderName() string }
+	return errors.As(err, &provider)
+}
+
+func errorLogAttributes(err error) []any {
+	var provider interface{ ProviderName() string }
+	if !errors.As(err, &provider) {
+		return []any{"error", err}
+	}
+	attributes := []any{"provider", provider.ProviderName(), "error_code", "PROVIDER_ERROR"}
+	var coded interface{ Code() string }
+	if errors.As(err, &coded) && coded.Code() != "" {
+		attributes[len(attributes)-1] = coded.Code()
+	}
+	var operation interface{ ProviderOperation() string }
+	if errors.As(err, &operation) && operation.ProviderOperation() != "" {
+		attributes = append(attributes, "provider_operation", operation.ProviderOperation())
+	}
+	var response interface{ ProviderStatus() int }
+	if errors.As(err, &response) && response.ProviderStatus() > 0 {
+		attributes = append(attributes, "provider_status", response.ProviderStatus())
+	}
+	return attributes
 }

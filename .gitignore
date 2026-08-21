@@ -11,6 +11,12 @@ dev-dist
 .env
 .env.*
 !.env.example
+deployments/env/*
+!deployments/env/*.example
+*.key
+*.pem
+*.p12
+*.pfx
 
 # Go 后端
 apps/server/bin/

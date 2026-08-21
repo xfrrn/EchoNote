@@ -99,7 +99,7 @@ WHERE document.id = sqlc.arg(document_id)
   AND (chunk.embedding IS NULL OR chunk.embedding_model IS DISTINCT FROM sqlc.arg(embedding_model));
 
 -- name: ListPendingSearchEmbeddings :many
-SELECT chunk.id, chunk.text
+SELECT chunk.id, chunk.text, document.episode_id
 FROM search_chunks AS chunk
 JOIN search_documents AS document ON document.id = chunk.search_document_id
 WHERE document.id = sqlc.arg(document_id)

@@ -43,6 +43,8 @@ psql "$OWNER_DATABASE_URL" \
 
 数据库管理员 URL 只在数据库管理终端使用，不复制到应用主机。确认 `pg_trgm`、`vector` 已启用，Runtime Role 没有数据库或 `public` Schema 的 `CREATE` 权限。若升级已有独立 EchoNote 数据库，先由管理员把应用表、序列和函数的 Owner 一次性转给 `echonote_migrate`；不得对共享数据库执行 `REASSIGN OWNED`。
 
+模板连接上限为 API 10 + Worker 5 + Migration 2 + Maintenance 1 = 18，低于应用预算 20；数据库 `max_connections` 还必须为托管监控、备份和管理员保留容量。扩容 Worker 前先重算总和，不能只提高单个 URL。
+
 ## 4. 构建不可变 Release
 
 在可信构建机从干净 commit 构建：
@@ -57,12 +59,14 @@ pnpm build
 (cd apps/server && go vet ./...)
 (cd apps/server && ECHONOTE_TEST_DATABASE_URL="$TEST_DATABASE_URL" go test -p 1 ./... -count=1)
 
-mkdir -p release/bin release/web
+mkdir -p release/bin release/web release/ops
 CGO_ENABLED=0 go build -trimpath -o release/bin/echonote-api ./apps/server/cmd/api
 CGO_ENABLED=0 go build -trimpath -o release/bin/echonote-worker ./apps/server/cmd/worker
 CGO_ENABLED=0 go build -trimpath -o release/bin/echonote-migrate ./apps/server/cmd/migrate
 CGO_ENABLED=0 go build -trimpath -o release/bin/echonote-admin ./apps/server/cmd/admin
+CGO_ENABLED=0 go build -trimpath -o release/bin/echonote-maintenance ./apps/server/cmd/maintenance
 cp -a apps/web/dist/. release/web/
+cp -a deployments/. release/ops/
 ```
 
 将 `release/` 上传到 `/opt/echonote/releases/<release-id>`。Release 目录由 root 持有、只读，不覆盖已有 Release。
@@ -79,12 +83,12 @@ sudo install -o root -g root -m 0644 db-ca.pem /etc/echonote/db-ca.pem
 
 环境文件不能包含 `ECHONOTE_USER_ID`。数据库用户名和密码必须按 URL 规则编码，模板中的 `CHANGE_ME` 会被预检拒绝。不要在 shell 中 `source` 这些文件；URL 中的 `&` 也不是 shell 语法。密钥轮换只更新环境文件并重启对应服务，不重新构建二进制。
 
-安装托管配置：
+安装本 Release 自带的托管配置（把 `<release-id>` 替换为刚上传且已核对的目录）：
 
 ```bash
-sudo install -o root -g root -m 0644 deployments/systemd/*.service /etc/systemd/system/
-sudo install -o root -g root -m 0644 deployments/nginx/echonote-proxy.conf /etc/nginx/snippets/echonote-proxy.conf
-sudo install -o root -g root -m 0644 deployments/nginx/echonote.conf /etc/nginx/conf.d/echonote.conf
+sudo install -o root -g root -m 0644 /opt/echonote/releases/<release-id>/ops/systemd/*.service /opt/echonote/releases/<release-id>/ops/systemd/*.timer /etc/systemd/system/
+sudo install -o root -g root -m 0644 /opt/echonote/releases/<release-id>/ops/nginx/echonote-proxy.conf /etc/nginx/snippets/echonote-proxy.conf
+sudo install -o root -g root -m 0644 /opt/echonote/releases/<release-id>/ops/nginx/echonote.conf /etc/nginx/conf.d/echonote.conf
 sudo systemctl daemon-reload
 ```
 
@@ -104,7 +108,7 @@ sudo mv -Tf /opt/echonote/current.next /opt/echonote/current
 4. 在改流前校验配置和托管文件：
 
 ```bash
-sudo systemd-analyze verify /etc/systemd/system/echonote-*.service
+sudo systemd-analyze verify /etc/systemd/system/echonote-*.service /etc/systemd/system/echonote-*.timer
 sudo nginx -t
 sudo systemd-run --quiet --wait --pipe --collect --uid=echonote-api \
   -p EnvironmentFile=/etc/echonote/common.env -p EnvironmentFile=/etc/echonote/api.env \
@@ -121,7 +125,7 @@ sudo systemctl start echonote-migrate.service
 sudo journalctl -u echonote-migrate.service -n 100 --no-pager
 ```
 
-6. 以 `echonote_migrate` 再执行一次 `runtime-grants.sql`，再执行 Maintenance 列级授权；核对 Runtime DML 权限。默认权限已保证后续 Migration 继承：
+6. 以 `echonote_migrate` 再执行一次基础授权，然后应用 Worker 身份表隔离和 Maintenance 列级授权；核对 Runtime DML 权限。默认权限已保证后续 Migration 继承：
 
 ```bash
 psql "$MIGRATION_DATABASE_URL" \
@@ -130,10 +134,13 @@ psql "$MIGRATION_DATABASE_URL" \
   -v api_role=echonote_api \
   -v worker_role=echonote_worker \
   -v maintenance_role=echonote_maintenance \
-  -f deployments/postgres/runtime-grants.sql
+  -f /opt/echonote/current/ops/postgres/runtime-grants.sql
+psql "$MIGRATION_DATABASE_URL" \
+  -v worker_role=echonote_worker \
+  -f /opt/echonote/current/ops/postgres/runtime-table-grants.sql
 psql "$MIGRATION_DATABASE_URL" \
   -v maintenance_role=echonote_maintenance \
-  -f deployments/postgres/maintenance-grants.sql
+  -f /opt/echonote/current/ops/postgres/maintenance-grants.sql
 ```
 7. 启动并设为开机恢复：
 
@@ -151,14 +158,15 @@ sudo systemctl --no-pager --full status echonote-api echonote-worker nginx
 sudo journalctl -u echonote-api -u echonote-worker --since '-5 minutes' --no-pager
 ```
 
-9. 运行 `deployments/scripts/smoke.sh https://notes.example.com`，密码只从交互式终端读取。
+9. 运行 `/opt/echonote/current/ops/scripts/smoke.sh https://notes.example.com`，密码只从交互式终端读取。
 
 ## 7. 首次环境验收
 
 - `systemd-analyze security echonote-api echonote-worker`，确认服务为独立非 root 用户。
-- `sudo -u echonote-api test ! -r /etc/echonote/worker.env`，反向亦然。
+- `sudo -u echonote-api test ! -r /etc/echonote/worker.env`，反向亦然；Worker DB Role 对 `users`/`sessions` 无任何权限、对 `notes` 只读。
 - 从另一台主机确认 8080 不可达，80 只跳转 443。
 - 使用真实 Run ID 让 SSE 持续连接并带 `Last-Event-ID` 重连。
 - 在 Staging 运行任务时终止 Worker；等待 Lease 超时并重启，确认 Job 被回收且没有重复 Transcript。
 - 重启 API、Worker 和主机，确认 Session、Job 和数据不丢失。
 - 按 Phase 12 Runbook 完成 Provider、告警、备份恢复、桌面与 iOS PWA 验收后才能放量。
+- 先按 Operations Runbook 审核留存 Dry Run 统计，再显式启用 `echonote-retention.timer`；部署流程不会自动启用删除。

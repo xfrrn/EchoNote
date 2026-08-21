@@ -335,10 +335,11 @@ func alphabeticLabel(index int) string {
 }
 
 type Request struct {
-	AudioURL     string
-	Model        string
-	LanguageHint string
-	SpeakerCount int
+	AudioURL        string
+	AudioDurationMS int64
+	Model           string
+	LanguageHint    string
+	SpeakerCount    int
 }
 
 type ExternalTask struct {

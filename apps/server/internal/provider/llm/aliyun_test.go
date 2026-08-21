@@ -78,3 +78,11 @@ func TestAliyunChatStream(t *testing.T) {
 		t.Fatalf("text=%q usage=%+v", text, usage)
 	}
 }
+
+func TestProviderErrorRetryability(t *testing.T) {
+	for status, expected := range map[int]bool{0: true, http.StatusBadRequest: false, http.StatusUnauthorized: false, http.StatusRequestTimeout: true, http.StatusTooManyRequests: true, http.StatusServiceUnavailable: true} {
+		if actual := (&ProviderError{StatusCode: status}).Retryable(); actual != expected {
+			t.Fatalf("status=%d retryable=%v", status, actual)
+		}
+	}
+}

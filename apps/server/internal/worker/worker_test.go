@@ -1,10 +1,11 @@
 package worker
 
 import (
+	"bytes"
 	"context"
 	"errors"
-	"io"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -69,13 +70,17 @@ func TestWorkerProcessesJobOutcome(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			queue := &fakeQueue{}
-			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+			var logs bytes.Buffer
+			logger := slog.New(slog.NewJSONHandler(&logs, nil))
 			process := New(queue, logger, "worker-test", time.Millisecond, time.Second, map[string]Handler{
 				"test": test.handler,
 			})
 			process.process(context.Background(), db.Job{
-				ID:   pgtype.UUID{Bytes: [16]byte{1}, Valid: true},
-				Type: "test",
+				ID:         pgtype.UUID{Bytes: [16]byte{1}, Valid: true},
+				UserID:     pgtype.UUID{Bytes: [16]byte{2}, Valid: true},
+				Type:       "test",
+				EntityType: "transcription_run",
+				EntityID:   pgtype.UUID{Bytes: [16]byte{3}, Valid: true},
 			})
 
 			if queue.completed != test.wantComplete || queue.retried != test.wantRetry {
@@ -86,6 +91,14 @@ func TestWorkerProcessesJobOutcome(t *testing.T) {
 			}
 			if queue.retried && (queue.errorCode != test.wantCode || queue.retryable != test.wantRetryable) {
 				t.Fatalf("errorCode=%q retryable=%v", queue.errorCode, queue.retryable)
+			}
+			for _, field := range []string{`"msg":"job started"`, `"job_id":`, `"user_id":`, `"transcription_run_id":`, `"operation":"test"`, `"duration_ms":`} {
+				if !strings.Contains(logs.String(), field) {
+					t.Fatalf("logs missing %s: %s", field, logs.String())
+				}
+			}
+			if queue.retried && !strings.Contains(logs.String(), `"error_code":"`+test.wantCode+`"`) {
+				t.Fatalf("logs missing error code: %s", logs.String())
 			}
 		})
 	}

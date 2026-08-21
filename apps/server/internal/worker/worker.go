@@ -10,10 +10,14 @@ import (
 	"time"
 
 	"github.com/Actify/echonote/apps/server/internal/database/db"
+	applogging "github.com/Actify/echonote/apps/server/internal/logging"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const retryDelay = 5 * time.Second
+const (
+	retryDelay              = 5 * time.Second
+	workerHeartbeatInterval = time.Minute
+)
 
 type Queue interface {
 	Claim(context.Context, string, []string) (db.Job, bool, error)
@@ -84,8 +88,10 @@ func (w *Worker) Run(ctx context.Context) error {
 		recoverEvery = time.Millisecond
 	}
 	recoverLeases := time.NewTicker(recoverEvery)
+	workerHeartbeat := time.NewTicker(workerHeartbeatInterval)
 	defer poll.Stop()
 	defer recoverLeases.Stop()
+	defer workerHeartbeat.Stop()
 
 	// ponytail: one active job per process keeps leases simple; add bounded concurrency when throughput requires it.
 	for {
@@ -104,6 +110,8 @@ func (w *Worker) Run(ctx context.Context) error {
 			w.logger.Info("worker stopped", "worker_id", w.workerID)
 			return nil
 		case <-poll.C:
+		case <-workerHeartbeat.C:
+			w.logger.InfoContext(ctx, "worker heartbeat", "worker_id", w.workerID, "state", "idle")
 		case <-recoverLeases.C:
 			if err := w.requeueStale(ctx); err != nil {
 				w.logger.ErrorContext(ctx, "recover stale jobs", "error", err)
@@ -113,11 +121,14 @@ func (w *Worker) Run(ctx context.Context) error {
 }
 
 func (w *Worker) process(ctx context.Context, job db.Job) {
-	jobID := fmt.Sprintf("%x", job.ID.Bytes)
-	jobContext, cancelJob := context.WithCancel(ctx)
+	started := time.Now()
+	correlationLogger, logger := w.jobLoggers(job)
+	logger.InfoContext(ctx, "job started")
+	rawJobContext, cancelJob := context.WithCancel(ctx)
+	jobContext := applogging.WithLogger(rawJobContext, correlationLogger)
 	result := make(chan error, 1)
 	go func() {
-		result <- w.runHandler(jobContext, job)
+		result <- w.runHandler(jobContext, job, logger)
 	}()
 
 	heartbeatEvery := w.leaseTimeout / 3
@@ -137,14 +148,18 @@ func (w *Worker) process(ctx context.Context, job db.Job) {
 			defer cancel()
 			if err == nil {
 				if err := w.queue.Complete(transitionContext, job.ID, w.workerID); err != nil {
-					w.logger.Error("complete job", "job_id", jobID, "job_type", job.Type, "error", err)
+					logger.Error("complete job", "error", err)
+				} else {
+					logger.Info("job completed", "duration_ms", elapsedMilliseconds(started))
 				}
 				return
 			}
 			var reschedule interface{ RescheduleAfter() time.Duration }
 			if errors.As(err, &reschedule) {
 				if transitionErr := w.queue.Reschedule(transitionContext, job.ID, w.workerID, reschedule.RescheduleAfter()); transitionErr != nil {
-					w.logger.Error("reschedule job", "job_id", jobID, "job_type", job.Type, "error", transitionErr)
+					logger.Error("reschedule job", "error", transitionErr)
+				} else {
+					logger.Info("job rescheduled", "duration_ms", elapsedMilliseconds(started), "delay_ms", reschedule.RescheduleAfter().Milliseconds())
 				}
 				return
 			}
@@ -171,10 +186,25 @@ func (w *Worker) process(ctx context.Context, job db.Job) {
 				retryable,
 			)
 			if transitionErr != nil {
-				w.logger.Error("record job failure", "job_id", jobID, "job_type", job.Type, "error", transitionErr)
+				logger.Error("record job failure", "error", transitionErr)
 				return
 			}
-			w.logger.Warn("job handler failed", "job_id", jobID, "job_type", job.Type, "status", status, "error", err, "cause", errors.Unwrap(err))
+			attributes := []any{"status", status, "error_code", errorCode, "duration_ms", elapsedMilliseconds(started)}
+			var provider interface {
+				ProviderName() string
+				ProviderOperation() string
+				ProviderStatus() int
+			}
+			if errors.As(err, &provider) {
+				if providerForJob(job.Type) == "" {
+					attributes = append(attributes, "provider", provider.ProviderName())
+				}
+				attributes = append(attributes, "provider_operation", provider.ProviderOperation())
+				if provider.ProviderStatus() > 0 {
+					attributes = append(attributes, "provider_status", provider.ProviderStatus())
+				}
+			}
+			logger.Warn("job handler failed", attributes...)
 			return
 		case <-heartbeat.C:
 			heartbeatContext, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
@@ -182,19 +212,18 @@ func (w *Worker) process(ctx context.Context, job db.Job) {
 			cancel()
 			if err != nil {
 				cancelJob()
-				w.logger.Error("heartbeat job", "job_id", jobID, "job_type", job.Type, "error", err)
+				logger.Error("heartbeat job", "error", err)
 				return
 			}
+			logger.Info("worker heartbeat", "state", "busy")
 		}
 	}
 }
 
-func (w *Worker) runHandler(ctx context.Context, job db.Job) (err error) {
+func (w *Worker) runHandler(ctx context.Context, job db.Job, logger *slog.Logger) (err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			w.logger.Error("job handler panic",
-				"job_id", fmt.Sprintf("%x", job.ID.Bytes),
-				"job_type", job.Type,
+			logger.Error("job handler panic",
 				"panic", recovered,
 				"stack", string(debug.Stack()),
 			)
@@ -202,6 +231,57 @@ func (w *Worker) runHandler(ctx context.Context, job db.Job) (err error) {
 		}
 	}()
 	return w.handlers[job.Type](ctx, job)
+}
+
+func (w *Worker) jobLoggers(job db.Job) (*slog.Logger, *slog.Logger) {
+	attributes := []any{"worker_id", w.workerID, "job_id", uuidText(job.ID)}
+	if job.UserID.Valid {
+		attributes = append(attributes, "user_id", uuidText(job.UserID))
+	}
+	switch job.EntityType {
+	case "episode", "deleted_episode_audio":
+		attributes = append(attributes, "episode_id", uuidText(job.EntityID))
+	case "transcription_run":
+		attributes = append(attributes, "transcription_run_id", uuidText(job.EntityID))
+	default:
+		attributes = append(attributes, "entity_type", job.EntityType, "entity_id", uuidText(job.EntityID))
+	}
+	correlation := w.logger.With(attributes...)
+	jobAttributes := []any{"operation", job.Type, "attempt", job.Attempt, "max_attempts", job.MaxAttempts}
+	if provider := providerForJob(job.Type); provider != "" {
+		jobAttributes = append(jobAttributes, "provider", provider)
+	}
+	return correlation, correlation.With(jobAttributes...)
+}
+
+func providerForJob(jobType string) string {
+	switch jobType {
+	case "submit_asr", "poll_asr", "ingest_asr_result", "cancel_asr":
+		return "aliyun_asr"
+	case "generate_embeddings":
+		return "aliyun_embedding"
+	case "generate_ai_artifact":
+		return "aliyun_llm"
+	case "cleanup_audio":
+		return "aliyun_oss"
+	default:
+		return ""
+	}
+}
+
+func uuidText(id pgtype.UUID) string {
+	if !id.Valid {
+		return ""
+	}
+	value := id.Bytes
+	return fmt.Sprintf("%x-%x-%x-%x-%x", value[0:4], value[4:6], value[6:8], value[8:10], value[10:16])
+}
+
+func elapsedMilliseconds(started time.Time) int64 {
+	if elapsed := time.Since(started).Milliseconds(); elapsed > 0 {
+		return elapsed
+	}
+	return 1
 }
 
 func (w *Worker) requeueStale(ctx context.Context) error {

@@ -19,6 +19,7 @@ import (
 	"github.com/Actify/echonote/apps/server/internal/logging"
 	"github.com/Actify/echonote/apps/server/internal/provider/embedding"
 	llmprovider "github.com/Actify/echonote/apps/server/internal/provider/llm"
+	"github.com/Actify/echonote/apps/server/internal/provider/observed"
 	"github.com/Actify/echonote/apps/server/internal/repository"
 	"github.com/Actify/echonote/apps/server/internal/service"
 )
@@ -70,6 +71,7 @@ func run(args []string) error {
 		if err != nil {
 			return fmt.Errorf("configure embedding: %w", err)
 		}
+		embeddingProvider = observed.WrapEmbedding(embeddingProvider, logger)
 	} else {
 		logger.Warn("semantic search disabled", "reason", cfg.ValidateEmbedding())
 	}
@@ -81,6 +83,7 @@ func run(args []string) error {
 		if err != nil {
 			return fmt.Errorf("configure LLM: %w", err)
 		}
+		llmProvider = observed.WrapLLM(llmProvider, logger)
 	} else {
 		logger.Warn("AI generation disabled", "reason", cfg.ValidateLLM())
 	}

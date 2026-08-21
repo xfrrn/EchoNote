@@ -53,6 +53,10 @@ func (err *ProviderError) Code() string {
 
 func (err *ProviderError) Retryable() bool { return err.retryable }
 
+func (err *ProviderError) ProviderName() string      { return "aliyun_asr" }
+func (err *ProviderError) ProviderOperation() string { return err.Operation }
+func (err *ProviderError) ProviderStatus() int       { return err.StatusCode }
+
 func (err *ProviderError) AmbiguousCost() bool { return err.ambiguousCost }
 
 type Aliyun struct {

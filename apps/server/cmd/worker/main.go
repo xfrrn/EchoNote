@@ -19,6 +19,7 @@ import (
 	"github.com/Actify/echonote/apps/server/internal/provider/audio"
 	"github.com/Actify/echonote/apps/server/internal/provider/embedding"
 	llmprovider "github.com/Actify/echonote/apps/server/internal/provider/llm"
+	"github.com/Actify/echonote/apps/server/internal/provider/observed"
 	podcastprovider "github.com/Actify/echonote/apps/server/internal/provider/podcast"
 	"github.com/Actify/echonote/apps/server/internal/provider/storage"
 	"github.com/Actify/echonote/apps/server/internal/repository"
@@ -87,6 +88,7 @@ func run(args []string) error {
 		if err != nil {
 			return fmt.Errorf("configure embedding: %w", err)
 		}
+		embeddingProvider = observed.WrapEmbedding(embeddingProvider, logger)
 	} else {
 		logger.Warn("semantic indexing disabled", "reason", cfg.ValidateEmbedding())
 	}
@@ -99,6 +101,7 @@ func run(args []string) error {
 		if err != nil {
 			return fmt.Errorf("configure LLM: %w", err)
 		}
+		llmProvider = observed.WrapLLM(llmProvider, logger)
 	} else {
 		logger.Warn("AI generation disabled", "reason", cfg.ValidateLLM())
 	}
@@ -106,17 +109,19 @@ func run(args []string) error {
 		handlers[jobType] = handler
 	}
 	if cfg.TranscriptionEnabled() {
-		objectStore, err := storage.NewAliyunOSS(storage.AliyunOSSConfig{
+		rawObjectStore, err := storage.NewAliyunOSS(storage.AliyunOSSConfig{
 			Region: cfg.StorageRegion, Endpoint: cfg.StorageEndpoint, Bucket: cfg.StorageBucket,
 			AccessKey: cfg.StorageAccessKey, SecretKey: cfg.StorageSecretKey,
 		})
 		if err != nil {
 			return fmt.Errorf("configure object storage: %w", err)
 		}
-		asrProvider, err := asr.NewAliyun(cfg.ASREndpoint, cfg.ASRAPIKey, nil)
+		objectStore := observed.WrapObjectStore(rawObjectStore, logger)
+		rawASRProvider, err := asr.NewAliyun(cfg.ASREndpoint, cfg.ASRAPIKey, nil)
 		if err != nil {
 			return fmt.Errorf("configure ASR: %w", err)
 		}
+		asrProvider := observed.WrapASR(rawASRProvider, logger)
 		audioProcessor, err := audio.NewFFmpeg(cfg.FFmpegPath, cfg.FFprobePath)
 		if err != nil {
 			return fmt.Errorf("configure audio processor: %w", err)

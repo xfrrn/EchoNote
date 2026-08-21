@@ -345,7 +345,7 @@ func (q *Queries) ListOwnedEpisodeIDsForSearch(ctx context.Context, userID pgtyp
 }
 
 const listPendingSearchEmbeddings = `-- name: ListPendingSearchEmbeddings :many
-SELECT chunk.id, chunk.text
+SELECT chunk.id, chunk.text, document.episode_id
 FROM search_chunks AS chunk
 JOIN search_documents AS document ON document.id = chunk.search_document_id
 WHERE document.id = $1
@@ -365,8 +365,9 @@ type ListPendingSearchEmbeddingsParams struct {
 }
 
 type ListPendingSearchEmbeddingsRow struct {
-	ID   pgtype.UUID `json:"id"`
-	Text string      `json:"text"`
+	ID        pgtype.UUID `json:"id"`
+	Text      string      `json:"text"`
+	EpisodeID pgtype.UUID `json:"episode_id"`
 }
 
 func (q *Queries) ListPendingSearchEmbeddings(ctx context.Context, arg ListPendingSearchEmbeddingsParams) ([]ListPendingSearchEmbeddingsRow, error) {
@@ -384,7 +385,7 @@ func (q *Queries) ListPendingSearchEmbeddings(ctx context.Context, arg ListPendi
 	items := []ListPendingSearchEmbeddingsRow{}
 	for rows.Next() {
 		var i ListPendingSearchEmbeddingsRow
-		if err := rows.Scan(&i.ID, &i.Text); err != nil {
+		if err := rows.Scan(&i.ID, &i.Text, &i.EpisodeID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

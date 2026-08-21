@@ -62,3 +62,11 @@ func TestAliyunEmbeddingRejectsInvalidResponse(t *testing.T) {
 		t.Fatal("expected invalid dimensions to fail")
 	}
 }
+
+func TestProviderErrorRetryability(t *testing.T) {
+	for status, expected := range map[int]bool{0: true, http.StatusBadRequest: false, http.StatusUnauthorized: false, http.StatusRequestTimeout: true, http.StatusTooManyRequests: true, http.StatusBadGateway: true} {
+		if actual := (&ProviderError{StatusCode: status}).Retryable(); actual != expected {
+			t.Fatalf("status=%d retryable=%v", status, actual)
+		}
+	}
+}

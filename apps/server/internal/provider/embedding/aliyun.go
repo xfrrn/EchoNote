@@ -37,8 +37,13 @@ func (err *ProviderError) Error() string {
 	return "aliyun embedding: " + err.Message
 }
 
-func (err *ProviderError) Code() string    { return "EMBEDDING_PROVIDER_ERROR" }
-func (err *ProviderError) Retryable() bool { return false }
+func (err *ProviderError) Code() string { return "EMBEDDING_PROVIDER_ERROR" }
+func (err *ProviderError) Retryable() bool {
+	return err.StatusCode == 0 || err.StatusCode == http.StatusRequestTimeout || err.StatusCode == http.StatusTooManyRequests || err.StatusCode >= 500
+}
+func (err *ProviderError) ProviderName() string      { return "aliyun_embedding" }
+func (err *ProviderError) ProviderOperation() string { return "embed" }
+func (err *ProviderError) ProviderStatus() int       { return err.StatusCode }
 
 type Aliyun struct {
 	baseURL    string

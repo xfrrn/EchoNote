@@ -306,14 +306,14 @@ SELECT
     import_record.submitted_url,
     import_record.episode_id,
     episode.resolve_status AS episode_resolve_status,
-    job.status,
-    job.stage,
+    COALESCE(job.status, CASE WHEN episode.resolve_status = 'completed' THEN 'succeeded' ELSE 'failed' END)::text AS status,
+    COALESCE(job.stage, CASE WHEN episode.resolve_status = 'completed' THEN 'completed' ELSE 'expired' END)::text AS stage,
     job.error_code,
     job.error_message,
     import_record.created_at,
-    GREATEST(import_record.updated_at, job.updated_at)::timestamptz AS updated_at
+    GREATEST(import_record.updated_at, COALESCE(job.updated_at, import_record.updated_at))::timestamptz AS updated_at
 FROM imports AS import_record
-JOIN jobs AS job ON job.id = import_record.job_id
+LEFT JOIN jobs AS job ON job.id = import_record.job_id
 LEFT JOIN episodes AS episode
   ON episode.id = import_record.episode_id
  AND episode.user_id = import_record.user_id

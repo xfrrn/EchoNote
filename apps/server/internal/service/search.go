@@ -12,6 +12,7 @@ import (
 
 	"github.com/Actify/echonote/apps/server/internal/database/db"
 	searchdomain "github.com/Actify/echonote/apps/server/internal/domain/search"
+	"github.com/Actify/echonote/apps/server/internal/logging"
 	"github.com/Actify/echonote/apps/server/internal/repository"
 	workerapp "github.com/Actify/echonote/apps/server/internal/worker"
 	"github.com/jackc/pgx/v5"
@@ -69,6 +70,9 @@ func (service *SearchService) Search(
 	output := SearchOutput{Mode: "keyword"}
 	var semantic []searchdomain.Candidate
 	if service.provider != nil {
+		if episodeID.Valid {
+			ctx = logging.WithAttributes(ctx, "episode_id", episodeID.String())
+		}
 		vectors, embedErr := service.provider.Embed(ctx, []string{query}, searchdomain.EmbeddingQuery)
 		if embedErr != nil {
 			output.SemanticError = embedErr
@@ -144,7 +148,8 @@ func (workflow *SearchWorkflow) generate(ctx context.Context, job db.Job) error 
 		for index, chunk := range batch {
 			texts[index], ids[index] = chunk.Text, chunk.ID
 		}
-		vectors, err := workflow.provider.Embed(ctx, texts, searchdomain.EmbeddingDocument)
+		providerContext := logging.WithAttributes(ctx, "episode_id", batch[0].EpisodeID.String())
+		vectors, err := workflow.provider.Embed(providerContext, texts, searchdomain.EmbeddingDocument)
 		if err != nil {
 			return err
 		}

@@ -52,7 +52,9 @@ func (s *Server) SearchContent(w http.ResponseWriter, r *http.Request, params Se
 		return
 	}
 	if output.SemanticError != nil {
-		s.logger.WarnContext(r.Context(), "semantic search unavailable", "request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(requestUserID(r)), "error", output.SemanticError)
+		attributes := []any{"request_id", middleware.GetReqID(r.Context()), "user_id", formatUUID(requestUserID(r))}
+		attributes = append(attributes, errorLogAttributes(output.SemanticError)...)
+		s.logger.WarnContext(r.Context(), "semantic search unavailable", attributes...)
 	}
 	items := make([]SearchResult, len(output.Items))
 	for index, item := range output.Items {
