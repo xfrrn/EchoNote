@@ -43,7 +43,6 @@ pnpm preview    # 预览构建产物
 cd apps/server
 export DATABASE_URL='postgres://postgres:postgres@localhost:5432/echonote?sslmode=disable'
 go run ./cmd/api
-go run ./cmd/worker
 ```
 
-API 和 Worker 启动时会自动检查并补齐数据库 Schema，不需要单独执行 Migration 命令；首次初始化使用的数据库账号需要有目标 Schema 的建表权限。优先使用已有 PostgreSQL；仓库根目录的 Compose 仅作为没有本地数据库时的可选方案。详细启动、Worker、代码生成和测试说明见 [`apps/server/README.md`](apps/server/README.md)。
+开发环境的 API 会在同一进程启动 Worker，并自动检查和补齐数据库 Schema，因此日常只需要前端与后端两个终端。首次初始化使用的数据库账号需要有目标 Schema 的建表权限。优先使用已有 PostgreSQL；仓库根目录的 Compose 仅作为没有本地数据库时的可选方案。详细启动、Worker、代码生成和测试说明见 [`apps/server/README.md`](apps/server/README.md)。

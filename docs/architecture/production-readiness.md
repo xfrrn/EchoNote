@@ -17,7 +17,7 @@
 
 必须完成本文 Phase 9–12，并通过最后的 Release Gate，才能将 EchoNote 标记为“生产可用”。
 
-当前仓库已完成 Phase 9–12 的代码、部署资产和本地验收。真实 Staging Provider、托管备份恢复、Linux 告警投递、桌面完整 PWA 与 iOS Safari 证据仍未完成，因此 Production Release Gate 继续保持 PENDING，不能标记为生产可用。
+当前仓库已完成 Phase 9–12 的代码、部署资产和本地验收，并在 Ubuntu 24.04 WSL 完成原生运行、回滚、SSE、Lease、Retention、完整 Fake Provider 浏览器闭环与桌面 PWA 安装/离线/Clipboard 验证。真实 Staging Provider、托管备份恢复、独立 Linux 主机与真实证书、外部告警、桌面 OS Share Sheet 和 iOS Safari 证据仍未完成，因此 Production Release Gate 继续保持 PENDING，不能标记为生产可用。
 
 本文补充总体架构，不替代 Phase 1–8 实施记录，也不修改转录算法。
 
@@ -488,4 +488,4 @@ Phase 9–12 继续遵循现有规则：
 
 ## 11. 下一步
 
-下一步按 `deployments/runbooks/release-gate.md` 在独立 Staging 与目标 Linux 平台执行真实 Provider、告警、备份恢复、回滚和桌面/iOS PWA 验收。所有 Gate 附真实证据并签名后，才能标记 Production-ready。
+下一步按 `deployments/runbooks/release-gate.md` 在独立 Staging 与目标 Linux 平台执行真实 Provider、外部告警、托管备份恢复、真实证书/主机重启，并补齐桌面 OS Share Sheet 与 iOS Safari 验收。所有 Gate 附真实证据并签名后，才能标记 Production-ready。

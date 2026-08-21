@@ -21,10 +21,9 @@ ECHONOTE_USER_ID=00000000-0000-4000-8000-000000000001
 
 ```bash
 go run ./cmd/api
-go run ./cmd/worker
 ```
 
-API 和 Worker 会在连接 PostgreSQL 时自动检查并补齐 Schema，不需要单独执行 Migration 命令；首次初始化使用的数据库账号需要有目标 Schema 的建表权限。两个服务是独立进程，内置数据库锁会避免并发初始化。Worker 处理 `resolve_episode`、转录状态机、Search 索引、Embedding 与按需 AI Artifact，同时续租并回收超时任务。`ECHONOTE_USER_ID` 只为 development / test 保留；staging / production 必须使用真实 Session，否则配置校验拒绝启动。
+development / test 环境的 API 会在同一进程启动 Worker，并自动检查和补齐 Schema，不需要单独执行 Migration 或 Worker 命令；首次初始化使用的数据库账号需要有目标 Schema 的建表权限。Worker 处理 `resolve_episode`、转录状态机、Search 索引、Embedding 与按需 AI Artifact，同时续租并回收超时任务。staging / production 继续使用独立 Worker 进程，保持数据库角色与临时目录隔离。`ECHONOTE_USER_ID` 只为 development / test 保留；staging / production 必须使用真实 Session，否则配置校验拒绝启动。
 
 未配置 ASR / Object Storage 时，已有 Import、Library、Notes 与 Transcript 读取仍可运行；新建和重试转录返回 503，Worker 只注册已有业务 Job。启用转录至少需要：
 

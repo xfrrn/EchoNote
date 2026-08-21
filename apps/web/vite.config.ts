@@ -2,15 +2,17 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+const apiProxy = process.env.ECHONOTE_API_PROXY ?? 'http://[::1]:8080'
+
 export default defineConfig({
   server: {
     proxy: {
-      '/api': 'http://[::1]:8080'
+      '/api': apiProxy
     }
   },
   preview: {
     proxy: {
-      '/api': 'http://[::1]:8080'
+      '/api': apiProxy
     }
   },
   plugins: [

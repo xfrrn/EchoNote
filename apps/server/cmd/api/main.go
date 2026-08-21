@@ -22,6 +22,7 @@ import (
 	"github.com/Actify/echonote/apps/server/internal/provider/observed"
 	"github.com/Actify/echonote/apps/server/internal/repository"
 	"github.com/Actify/echonote/apps/server/internal/service"
+	"github.com/Actify/echonote/apps/server/internal/workerruntime"
 )
 
 func main() {
@@ -111,24 +112,35 @@ func run(args []string) error {
 		IdleTimeout:       60 * time.Second,
 	}
 	errorsChannel := make(chan error, 1)
+	workerErrors := make(chan error, 1)
+	if !cfg.SecureEnvironment() {
+		go func() {
+			workerErrors <- workerruntime.Run(ctx, cfg, pool)
+		}()
+	}
 	go func() {
 		logger.Info("api started", "address", server.Addr)
 		errorsChannel <- server.ListenAndServe()
 	}()
 
+	var runErr error
 	select {
 	case err := <-errorsChannel:
-		if errors.Is(err, http.ErrServerClosed) {
-			return nil
+		if !errors.Is(err, http.ErrServerClosed) {
+			runErr = fmt.Errorf("serve HTTP: %w", err)
 		}
-		return fmt.Errorf("serve HTTP: %w", err)
+	case err := <-workerErrors:
+		if err != nil {
+			runErr = fmt.Errorf("run embedded worker: %w", err)
+		}
 	case <-ctx.Done():
-		shutdownContext, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancelShutdown()
-		if err := server.Shutdown(shutdownContext); err != nil {
-			return fmt.Errorf("shutdown HTTP server: %w", err)
-		}
-		logger.Info("api stopped")
-		return nil
 	}
+	stop()
+	shutdownContext, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelShutdown()
+	if err := server.Shutdown(shutdownContext); err != nil {
+		runErr = errors.Join(runErr, fmt.Errorf("shutdown HTTP server: %w", err))
+	}
+	logger.Info("api stopped")
+	return runErr
 }

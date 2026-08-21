@@ -21,9 +21,18 @@ func TestIdentityMigrationBackfillsAndClaimsExistingUser(t *testing.T) {
 	if err := database.MigrateUp(databaseURL); err != nil {
 		t.Fatal(err)
 	}
-	if err := database.MigrateDown(databaseURL, 1); err != nil {
+	version, dirty, err := database.MigrationVersion(databaseURL)
+	if err != nil || dirty || version < 7 {
+		t.Fatalf("migration version=%d dirty=%t err=%v", version, dirty, err)
+	}
+	if err := database.MigrateDown(databaseURL, int(version-6)); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := database.MigrateUp(databaseURL); err != nil {
+			t.Errorf("restore migration version: %v", err)
+		}
+	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()

@@ -1,6 +1,6 @@
 # Phase 11：生产运行环境实施记录
 
-- 状态：仓库实现完成，真实 Linux 主机与 HTTPS 验收待执行
+- 状态：仓库实现与 Ubuntu 24.04 WSL 原生部署验收完成；独立 Staging 主机、真实证书与外部告警待执行
 - 日期：2026-08-21
 
 ## 当前代码 → 目标
@@ -19,15 +19,19 @@
 
 ## 风险与边界
 
-- Nginx、systemd、证书续期、主机重启、SSE 和 Lease 恢复必须在真实 Staging Linux 主机验收；Windows 本地构建不能替代。
+- Ubuntu 24.04 WSL 已覆盖原生二进制、Nginx、systemd、SSE、Lease 和进程重启，但不能替代全新独立 Staging 主机、真实证书续期、外部告警投递、主机重启和第二位工程师复现。
 - 临时文件 age fence 以单 Worker 主机为首版边界；横向扩展前改为每 Worker 独立目录。
 - 数据库 Role 创建、Bucket 私有策略、云端额度和告警由目标平台实施，仓库只提供强制启动检查与 Runbook。
 - 常规回滚只切换不可变 Web/二进制 Release，不执行 Production Down Migration。
 
 ## 本地验收证据
 
+- Ubuntu 24.04 WSL 从仓库根目录构建 5 个 `linux/amd64`、`CGO_ENABLED=0` 二进制，安装不可变 Release、4 个非 root 服务用户、Nginx 与 systemd Unit；API/Worker `--check-config`、`nginx -t`、`systemd-analyze verify` 通过，API/Worker 的 `systemd-analyze security` exposure 均为 3.1。
+- PostgreSQL 17 + pgvector 通过 `sslmode=verify-full` 从 0 迁移到版本 8、`dirty=false`。原生演练发现并修复了 Runbook 构建目录、数据库 CA 目录穿越权限，以及 `pool_max_conns` 被迁移驱动误传为 PostgreSQL GUC 三个发布阻断问题。
+- API、Worker 与 Nginx 分别重启后 PID 变化且 Session 仍有效；真实 SSE 返回 `started/completed`，`Last-Event-ID: 1` 只重放后一事件；Worker 进程启动回收过期 Lease，Job 以 attempt 2 完成。
+- Release Symlink 从 `native-fix2` 回切 `native-fix1` 后配置预检、Nginx、readiness 与 HTTPS Smoke 通过，再前滚到 `native-fix2`；Migration 始终为版本 8，未执行 Down Migration。
 - 独立 PostgreSQL 17 + pgvector：`go test -p 1 ./... -count=1` 通过；包级串行避免多个集成测试包争用同一临时任务队列。
 - `go generate ./...` 与 TypeScript Contract 生成前后 SHA-256 一致，`go vet ./...`、`pnpm build`、`git diff --check` 通过。
 - Nginx 1.24 官方镜像加载仓库配置并执行 `nginx -t` 通过；生产部署仍不依赖 Docker。
-- systemd 255 能解析全部 Unit；Windows 挂载权限和 `/opt/echonote` 尚未安装产生的环境警告，按 Runbook 在真实 Staging 主机复验。
+- 本地实验 API 使用 `127.0.0.1:18080`、HTTPS 使用自签证书；仓库 Production 默认端口和真实受信证书仍按 Runbook 在独立 Staging 复验。
 - `smoke.sh` 通过 `bash -n`，外置 Theme 初始化脚本通过 Node 语法检查，生产 `index.html` 不含内联 Script。

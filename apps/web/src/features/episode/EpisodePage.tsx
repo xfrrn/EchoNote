@@ -75,7 +75,7 @@ export function EpisodePage() {
       {tab === 'notes' ? <NotesTab episode={item} /> : null}
       {tab === 'transcript' ? <TranscriptTab episode={item} /> : null}
       {tab === 'ai' ? <AiTab episode={item} /> : null}
-      <ShareSheet open={shareOpen} onOpenChange={setShareOpen} episode={item} />
+      <ShareSheet key={item.id} open={shareOpen} onOpenChange={setShareOpen} episode={item} />
     </div>
   )
 }

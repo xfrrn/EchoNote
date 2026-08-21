@@ -42,4 +42,21 @@ unset payload
 
 curl --fail --silent --show-error --cookie "$cookies" "$base_url/api/v1/me" | jq -e '.user.id and .user.username' > /dev/null
 curl --fail --silent --show-error --cookie "$cookies" --header "Origin: $base_url" --request POST "$base_url/api/v1/auth/logout" > /dev/null
+
+if [ "${VERIFY_LOGIN_RATE_LIMIT:-0}" = 1 ]; then
+  rate_payload='{"username":"echonote_rate_limit_probe","password":"invalid-test-only-password"}'
+  limited=0
+  for _ in {1..20}; do
+    status="$(printf '%s' "$rate_payload" | curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+      --header "Origin: $base_url" --header 'Content-Type: application/json' --data-binary @- \
+      "$base_url/api/v1/auth/login")"
+    case "$status" in
+      401) ;;
+      429) limited=1; break ;;
+      *) echo "unexpected login probe status: $status" >&2; exit 1 ;;
+    esac
+  done
+  test "$limited" = 1 || { echo 'login rate limit did not return 429' >&2; exit 1; }
+fi
+
 echo 'EchoNote smoke passed'

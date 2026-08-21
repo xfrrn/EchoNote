@@ -67,6 +67,35 @@ func TestJobQueueLifecycle(t *testing.T) {
 		t.Fatalf("status=%q events=%d", stored.Status, len(events))
 	}
 
+	staleType := jobType + "_stale"
+	staleJob, err := queue.Enqueue(ctx, NewJob{
+		Type: staleType, EntityType: "phase1_test", EntityID: randomUUID(t), MaxAttempts: 3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _, _ = pool.Exec(context.Background(), "DELETE FROM jobs WHERE id = $1", staleJob.ID) }()
+	if _, found, err := queue.Claim(ctx, "terminated-worker", []string{staleType}); err != nil || !found {
+		t.Fatalf("stale claim found=%v err=%v", found, err)
+	}
+	if _, err := pool.Exec(ctx, "UPDATE jobs SET locked_at = now() - interval '1 minute' WHERE id = $1", staleJob.ID); err != nil {
+		t.Fatal(err)
+	}
+	if count, err := queue.RequeueStale(ctx, time.Second); err != nil || count != 1 {
+		t.Fatalf("requeued stale jobs=%d err=%v", count, err)
+	}
+	recovered, found, err := queue.Claim(ctx, "replacement-worker", []string{staleType})
+	if err != nil || !found || recovered.Attempt != 2 {
+		t.Fatalf("recovered claim=%+v found=%v err=%v", recovered, found, err)
+	}
+	if err := queue.Complete(ctx, recovered.ID, "replacement-worker"); err != nil {
+		t.Fatal(err)
+	}
+	staleEvents, err := db.New(pool).ListJobEvents(ctx, staleJob.ID)
+	if err != nil || len(staleEvents) != 5 || staleEvents[2].EventType != "queued" || staleEvents[4].EventType != "succeeded" {
+		t.Fatalf("stale events=%+v err=%v", staleEvents, err)
+	}
+
 	retryType := jobType + "_retry"
 	retryJob, err := queue.Enqueue(ctx, NewJob{
 		Type:        retryType,

@@ -35,6 +35,17 @@ func run(args []string) error {
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
+	var passwordHash string
+	if args[0] != "retry-cleanup" {
+		password, err := readPassword()
+		if err != nil {
+			return err
+		}
+		passwordHash, err = authn.HashPassword(password, cfg.PasswordBcryptCost)
+		if err != nil {
+			return fmt.Errorf("password: %w", err)
+		}
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	pool, err := database.Open(ctx, cfg.DatabaseURL, "echonote-admin")
@@ -61,14 +72,6 @@ func run(args []string) error {
 		return nil
 	}
 
-	password, err := readPassword()
-	if err != nil {
-		return err
-	}
-	passwordHash, err := authn.HashPassword(password, cfg.PasswordBcryptCost)
-	if err != nil {
-		return fmt.Errorf("password: %w", err)
-	}
 	authRepository := repository.NewAuthRepository(pool)
 
 	switch args[0] {

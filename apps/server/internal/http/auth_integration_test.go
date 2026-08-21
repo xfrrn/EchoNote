@@ -121,6 +121,24 @@ func TestSessionHTTPFlow(t *testing.T) {
 		t.Fatal("reset password cannot create a new session")
 	}
 
+	clockRollbackToken, clockRollbackHash, err := authn.NewSessionToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO sessions (user_id, token_hash, created_at, last_seen_at, expires_at)
+		VALUES ($1, $2, now() + interval '1 hour', now() + interval '1 hour', now() + interval '2 hours')
+	`, user.ID, clockRollbackHash[:]); err != nil {
+		t.Fatal(err)
+	}
+	request = httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
+	request.AddCookie(&http.Cookie{Name: authn.SessionCookieName, Value: clockRollbackToken})
+	response = httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("clock rollback session status=%d body=%s", response.Code, response.Body.String())
+	}
+
 	expiredToken, expiredHash, err := authn.NewSessionToken()
 	if err != nil {
 		t.Fatal(err)

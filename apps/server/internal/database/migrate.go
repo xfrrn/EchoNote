@@ -64,6 +64,9 @@ func newMigrator(databaseURL string) (*migrate.Migrate, error) {
 	if parsed.Scheme != "postgres" && parsed.Scheme != "postgresql" && parsed.Scheme != "pgx5" {
 		return nil, fmt.Errorf("DATABASE_URL must use postgres, postgresql, or pgx5 scheme")
 	}
+	query := parsed.Query()
+	query.Del("pool_max_conns")
+	parsed.RawQuery = query.Encode()
 	parsed.Scheme = "pgx5"
 
 	instance, err := migrate.NewWithSourceInstance("iofs", source, parsed.String())

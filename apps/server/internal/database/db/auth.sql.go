@@ -13,7 +13,7 @@ import (
 
 const authenticateSession = `-- name: AuthenticateSession :one
 UPDATE sessions AS session
-SET last_seen_at = now()
+SET last_seen_at = GREATEST(session.last_seen_at, now())
 FROM users AS app_user
 WHERE session.token_hash = $1
   AND session.revoked_at IS NULL

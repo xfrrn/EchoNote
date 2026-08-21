@@ -19,7 +19,7 @@ sudo useradd --system --home-dir /nonexistent --shell /usr/sbin/nologin echonote
 sudo useradd --system --home-dir /nonexistent --shell /usr/sbin/nologin echonote-migrate
 sudo useradd --system --home-dir /nonexistent --shell /usr/sbin/nologin echonote-maintenance
 sudo install -d -o root -g root -m 0755 /opt/echonote/releases
-sudo install -d -o root -g root -m 0700 /etc/echonote
+sudo install -d -o root -g root -m 0711 /etc/echonote
 sudo install -d -o echonote-worker -g echonote-worker -m 0700 /var/lib/echonote/tmp
 ```
 
@@ -60,11 +60,11 @@ pnpm build
 (cd apps/server && ECHONOTE_TEST_DATABASE_URL="$TEST_DATABASE_URL" go test -p 1 ./... -count=1)
 
 mkdir -p release/bin release/web release/ops
-CGO_ENABLED=0 go build -trimpath -o release/bin/echonote-api ./apps/server/cmd/api
-CGO_ENABLED=0 go build -trimpath -o release/bin/echonote-worker ./apps/server/cmd/worker
-CGO_ENABLED=0 go build -trimpath -o release/bin/echonote-migrate ./apps/server/cmd/migrate
-CGO_ENABLED=0 go build -trimpath -o release/bin/echonote-admin ./apps/server/cmd/admin
-CGO_ENABLED=0 go build -trimpath -o release/bin/echonote-maintenance ./apps/server/cmd/maintenance
+CGO_ENABLED=0 go -C apps/server build -trimpath -o ../../release/bin/echonote-api ./cmd/api
+CGO_ENABLED=0 go -C apps/server build -trimpath -o ../../release/bin/echonote-worker ./cmd/worker
+CGO_ENABLED=0 go -C apps/server build -trimpath -o ../../release/bin/echonote-migrate ./cmd/migrate
+CGO_ENABLED=0 go -C apps/server build -trimpath -o ../../release/bin/echonote-admin ./cmd/admin
+CGO_ENABLED=0 go -C apps/server build -trimpath -o ../../release/bin/echonote-maintenance ./cmd/maintenance
 cp -a apps/web/dist/. release/web/
 cp -a deployments/. release/ops/
 ```
@@ -80,6 +80,8 @@ sudo chown root:root /etc/echonote/*.env
 sudo chmod 0600 /etc/echonote/*.env
 sudo install -o root -g root -m 0644 db-ca.pem /etc/echonote/db-ca.pem
 ```
+
+`/etc/echonote` 使用 `0711`，让非 root 服务只能穿越目录读取公开的数据库 CA；环境文件和私钥仍保持 `0600 root:root`，服务用户不能直接读取。
 
 环境文件不能包含 `ECHONOTE_USER_ID`。数据库用户名和密码必须按 URL 规则编码，模板中的 `CHANGE_ME` 会被预检拒绝。不要在 shell 中 `source` 这些文件；URL 中的 `&` 也不是 shell 语法。密钥轮换只更新环境文件并重启对应服务，不重新构建二进制。
 

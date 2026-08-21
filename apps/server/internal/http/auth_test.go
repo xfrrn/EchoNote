@@ -26,12 +26,14 @@ func TestBusinessRoutesRequireSessionAndSameOrigin(t *testing.T) {
 		t.Fatalf("unauthenticated status=%d cache=%q body=%s", response.Code, response.Header().Get("Cache-Control"), response.Body.String())
 	}
 
-	request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"username":"alice","password":"correct horse battery staple"}`))
-	request.Header.Set("Origin", "https://evil.example.test")
-	response = httptest.NewRecorder()
-	router.ServeHTTP(response, request)
-	if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "ORIGIN_FORBIDDEN") {
-		t.Fatalf("cross-origin status=%d body=%s", response.Code, response.Body.String())
+	for _, path := range []string{"/api/v1/auth/login", "/api/v1/captures"} {
+		request = httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{}`))
+		request.Header.Set("Origin", "https://evil.example.test")
+		response = httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+		if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "ORIGIN_FORBIDDEN") {
+			t.Fatalf("cross-origin path=%s status=%d body=%s", path, response.Code, response.Body.String())
+		}
 	}
 }
 

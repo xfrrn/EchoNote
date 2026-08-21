@@ -35,8 +35,8 @@ func TestTranscriptionHTTPFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer pool.Close()
-	userID := randomHTTPUUID(t)
-	defer ensureTestUsers(t, pool, userID)()
+	userID, otherUserID := randomHTTPUUID(t), randomHTTPUUID(t)
+	defer ensureTestUsers(t, pool, userID, otherUserID)()
 	defer func() {
 		_, _ = pool.Exec(context.Background(), "DELETE FROM imports WHERE user_id = $1", userID)
 		_, _ = pool.Exec(context.Background(), "DELETE FROM jobs WHERE user_id = $1", userID)
@@ -134,6 +134,23 @@ func TestTranscriptionHTTPFlow(t *testing.T) {
 	}
 	if transcript.Id != formatUUID(version.ID) {
 		t.Fatalf("transcript=%+v", transcript)
+	}
+	otherRouter := NewRouter(
+		pool, imports, repository.NewLibraryRepository(pool), repository.NewNotesRepository(pool),
+		transcriptions, nil, nil, nil, nil, true, developmentAuth(otherUserID), slog.New(slog.NewTextHandler(io.Discard, nil)),
+	)
+	for _, isolatedPath := range []string{
+		"/api/v1/transcriptions/" + run.Id,
+		"/api/v1/episodes/" + formatUUID(episodeID) + "/transcript",
+		"/api/v1/transcripts/" + transcript.Id + "/segments",
+		"/api/v1/transcriptions/" + run.Id + "/events",
+	} {
+		request = httptest.NewRequest(http.MethodGet, isolatedPath, nil)
+		response = httptest.NewRecorder()
+		otherRouter.ServeHTTP(response, request)
+		if response.Code != http.StatusNotFound {
+			t.Fatalf("transcript isolation path=%s status=%d body=%s", isolatedPath, response.Code, response.Body.String())
+		}
 	}
 
 	request = httptest.NewRequest(http.MethodGet, "/api/v1/transcripts/"+transcript.Id+"/segments", nil)
