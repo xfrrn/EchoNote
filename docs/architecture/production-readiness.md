@@ -1,14 +1,14 @@
 # EchoNote 生产就绪补全方案 v1.0
 
-- 状态：待实施
+- 状态：Phase 9–12 仓库实现完成；外部 Release Gate 待验收
 - 基线：Phase 1–8，Git commit f981ddc
 - 更新日期：2026-08-21
 
 ## 1. 结论
 
-Phase 1–8 已完成后端业务能力，但当前仓库还不能直接作为生产产品交付。
+本文编写时 Phase 1–8 已完成后端业务能力，但仓库还不能直接作为生产产品交付。
 
-阻塞生产发布的 P0 项只有四类：
+当时阻塞生产发布的 P0 项有四类：
 
 1. Auth、Session 和请求级用户身份尚未实现。
 2. Web 仍读取 Mock Data，没有接入真实 API。
@@ -17,9 +17,11 @@ Phase 1–8 已完成后端业务能力，但当前仓库还不能直接作为�
 
 必须完成本文 Phase 9–12，并通过最后的 Release Gate，才能将 EchoNote 标记为“生产可用”。
 
+当前仓库已完成 Phase 9–12 的代码、部署资产和本地验收。真实 Staging Provider、托管备份恢复、Linux 告警投递、桌面完整 PWA 与 iOS Safari 证据仍未完成，因此 Production Release Gate 继续保持 PENDING，不能标记为生产可用。
+
 本文补充总体架构，不替代 Phase 1–8 实施记录，也不修改转录算法。
 
-## 2. 当前基线
+## 2. 方案基线（Phase 1–8）
 
 | 能力 | 当前状态 | 是否阻塞生产 |
 | --- | --- | --- |
@@ -486,4 +488,4 @@ Phase 9–12 继续遵循现有规则：
 
 ## 11. 下一步
 
-下一阶段应从 Phase 9 开始。Phase 9 验收并提交前，不开始 Web API 切换；否则前端会继续依赖固定用户身份，形成无法安全上线的中间状态。
+下一步按 `deployments/runbooks/release-gate.md` 在独立 Staging 与目标 Linux 平台执行真实 Provider、告警、备份恢复、回滚和桌面/iOS PWA 验收。所有 Gate 附真实证据并签名后，才能标记 Production-ready。
