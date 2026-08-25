@@ -9,6 +9,8 @@
     "dev": "pnpm --filter web dev",
     "build": "pnpm --filter web build",
     "preview": "pnpm --filter web preview",
+    "mcp": "pnpm --filter @echonote/mcp build && pnpm --filter @echonote/mcp start",
+    "mcp:http": "pnpm --filter @echonote/mcp build && pnpm --filter @echonote/mcp start:http",
     "generate:icons": "pnpm --filter web generate:icons",
     "generate:contracts": "openapi-typescript apps/server/openapi/openapi.yaml -o packages/contracts/src/schema.ts"
   },
