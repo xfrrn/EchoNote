@@ -10,8 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Config struct {
@@ -21,6 +19,7 @@ type Config struct {
 	DatabaseURL        string
 	ExpectedDatabase   string
 	DatabaseBudget     int
+	InternalToken      string
 	LogLevel           slog.Level
 	WorkerPollInterval time.Duration
 	WorkerLeaseTimeout time.Duration
@@ -29,15 +28,7 @@ type Config struct {
 	ASRProvider        string
 	ASRAPIKey          string
 	ASREndpoint        string
-	ASRStandardModel   string
 	ASRQualityModel    string
-	EmbeddingProvider  string
-	EmbeddingAPIKey    string
-	EmbeddingEndpoint  string
-	LLMProvider        string
-	LLMAPIKey          string
-	LLMEndpoint        string
-	LLMModel           string
 	StorageProvider    string
 	StorageRegion      string
 	StorageEndpoint    string
@@ -46,8 +37,6 @@ type Config struct {
 	StorageSecretKey   string
 	FFmpegPath         string
 	FFprobePath        string
-	TranscriptionAPI   bool
-	OwnerID            pgtype.UUID
 }
 
 func Load() (Config, error) {
@@ -56,6 +45,7 @@ func Load() (Config, error) {
 		ServerHost:         envOrDefault("SERVER_HOST", "127.0.0.1"),
 		DatabaseURL:        strings.TrimSpace(os.Getenv("DATABASE_URL")),
 		ExpectedDatabase:   strings.TrimSpace(os.Getenv("EXPECTED_DATABASE_NAME")),
+		InternalToken:      strings.TrimSpace(os.Getenv("ECHONOTE_INTERNAL_TOKEN")),
 		WorkerPollInterval: time.Second,
 		WorkerLeaseTimeout: 5 * time.Minute,
 		WorkerTempMaxAge:   24 * time.Hour,
@@ -63,15 +53,7 @@ func Load() (Config, error) {
 		ASRProvider:        strings.ToLower(strings.TrimSpace(os.Getenv("ASR_PROVIDER"))),
 		ASRAPIKey:          strings.TrimSpace(os.Getenv("ASR_API_KEY")),
 		ASREndpoint:        envOrDefault("ASR_ENDPOINT", "https://dashscope.aliyuncs.com"),
-		ASRStandardModel:   strings.ToLower(envOrDefault("ASR_STANDARD_MODEL", "paraformer-v2")),
 		ASRQualityModel:    strings.ToLower(envOrDefault("ASR_QUALITY_MODEL", "fun-asr")),
-		EmbeddingProvider:  strings.ToLower(strings.TrimSpace(os.Getenv("EMBEDDING_PROVIDER"))),
-		EmbeddingAPIKey:    strings.TrimSpace(os.Getenv("EMBEDDING_API_KEY")),
-		EmbeddingEndpoint:  envOrDefault("EMBEDDING_ENDPOINT", "https://dashscope.aliyuncs.com"),
-		LLMProvider:        strings.ToLower(strings.TrimSpace(os.Getenv("LLM_PROVIDER"))),
-		LLMAPIKey:          strings.TrimSpace(os.Getenv("LLM_API_KEY")),
-		LLMEndpoint:        envOrDefault("LLM_ENDPOINT", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
-		LLMModel:           envOrDefault("LLM_MODEL", "qwen-plus"),
 		StorageProvider:    strings.ToLower(strings.TrimSpace(os.Getenv("STORAGE_PROVIDER"))),
 		StorageRegion:      strings.TrimSpace(os.Getenv("STORAGE_REGION")),
 		StorageEndpoint:    strings.TrimSpace(os.Getenv("STORAGE_ENDPOINT")),
@@ -87,13 +69,6 @@ func Load() (Config, error) {
 	}
 	if cfg.DatabaseURL == "" {
 		return Config{}, fmt.Errorf("DATABASE_URL is required")
-	}
-	ownerID := strings.TrimSpace(os.Getenv("ECHONOTE_OWNER_ID"))
-	if ownerID == "" {
-		return Config{}, fmt.Errorf("ECHONOTE_OWNER_ID is required")
-	}
-	if err := cfg.OwnerID.Scan(ownerID); err != nil {
-		return Config{}, fmt.Errorf("ECHONOTE_OWNER_ID must be a UUID")
 	}
 	if cfg.SecureEnvironment() {
 		budget, err := strconv.Atoi(strings.TrimSpace(os.Getenv("DATABASE_CONNECTION_BUDGET")))
@@ -114,7 +89,6 @@ func Load() (Config, error) {
 	if err := cfg.LogLevel.UnmarshalText([]byte(envOrDefault("LOG_LEVEL", "info"))); err != nil {
 		return Config{}, fmt.Errorf("LOG_LEVEL: %w", err)
 	}
-
 	if cfg.WorkerPollInterval, err = positiveDuration("WORKER_POLL_INTERVAL", cfg.WorkerPollInterval); err != nil {
 		return Config{}, err
 	}
@@ -130,20 +104,11 @@ func Load() (Config, error) {
 	if cfg.ASRProvider != "" && cfg.ASRProvider != "aliyun" {
 		return Config{}, fmt.Errorf("ASR_PROVIDER must be aliyun")
 	}
-	if cfg.ASRStandardModel != "paraformer-v2" {
-		return Config{}, fmt.Errorf("ASR_STANDARD_MODEL must be paraformer-v2")
-	}
 	if cfg.ASRQualityModel != "fun-asr" {
 		return Config{}, fmt.Errorf("ASR_QUALITY_MODEL must be fun-asr")
 	}
 	if cfg.StorageProvider != "" && cfg.StorageProvider != "aliyun_oss" {
 		return Config{}, fmt.Errorf("STORAGE_PROVIDER must be aliyun_oss")
-	}
-	if cfg.EmbeddingProvider != "" && cfg.EmbeddingProvider != "aliyun" {
-		return Config{}, fmt.Errorf("EMBEDDING_PROVIDER must be aliyun")
-	}
-	if cfg.LLMProvider != "" && cfg.LLMProvider != "aliyun" {
-		return Config{}, fmt.Errorf("LLM_PROVIDER must be aliyun")
 	}
 	if cfg.StorageEndpoint != "" {
 		endpoint, parseErr := url.Parse(cfg.StorageEndpoint)
@@ -157,31 +122,6 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("ASR_ENDPOINT must be an HTTPS URL without credentials")
 		}
 	}
-	if cfg.EmbeddingProvider != "" {
-		endpoint, parseErr := url.Parse(cfg.EmbeddingEndpoint)
-		if parseErr != nil || endpoint.Scheme != "https" || endpoint.Host == "" || endpoint.User != nil {
-			return Config{}, fmt.Errorf("EMBEDDING_ENDPOINT must be an HTTPS URL without credentials")
-		}
-	}
-	if cfg.LLMProvider != "" {
-		endpoint, parseErr := url.Parse(cfg.LLMEndpoint)
-		if parseErr != nil || endpoint.Scheme != "https" || endpoint.Host == "" || endpoint.User != nil {
-			return Config{}, fmt.Errorf("LLM_ENDPOINT must be an HTTPS URL without credentials")
-		}
-	}
-	rawTranscriptionAPI := strings.TrimSpace(os.Getenv("TRANSCRIPTION_ENABLED"))
-	if rawTranscriptionAPI == "" {
-		if cfg.SecureEnvironment() {
-			return Config{}, fmt.Errorf("TRANSCRIPTION_ENABLED is required in staging and production")
-		}
-		cfg.TranscriptionAPI = cfg.TranscriptionEnabled()
-	} else {
-		cfg.TranscriptionAPI, err = strconv.ParseBool(rawTranscriptionAPI)
-		if err != nil {
-			return Config{}, fmt.Errorf("TRANSCRIPTION_ENABLED must be true or false")
-		}
-	}
-
 	return cfg, nil
 }
 
@@ -190,9 +130,6 @@ func (cfg Config) SecureEnvironment() bool {
 }
 
 func (cfg Config) ListenAddress() string {
-	if cfg.ServerHost == "" {
-		return ":" + strconv.Itoa(cfg.ServerPort)
-	}
 	return net.JoinHostPort(cfg.ServerHost, strconv.Itoa(cfg.ServerPort))
 }
 
@@ -201,29 +138,14 @@ func (cfg Config) ValidateAPI() error {
 	if host == nil || !host.IsLoopback() {
 		return fmt.Errorf("SERVER_HOST must be a loopback IP")
 	}
-	if !cfg.SecureEnvironment() {
-		return nil
+	if len(cfg.InternalToken) < 32 || placeholder(cfg.InternalToken) {
+		return fmt.Errorf("ECHONOTE_INTERNAL_TOKEN must be a non-placeholder secret of at least 32 characters")
 	}
-	if !cfg.TranscriptionAPI {
-		return fmt.Errorf("TRANSCRIPTION_ENABLED must be true in staging and production")
-	}
-	if err := cfg.ValidateEmbedding(); err != nil {
-		return err
-	}
-	return cfg.ValidateLLM()
+	return nil
 }
 
 func (cfg Config) ValidateWorker() error {
-	if !cfg.SecureEnvironment() {
-		return nil
-	}
-	if err := cfg.ValidateTranscription(); err != nil {
-		return err
-	}
-	if err := cfg.ValidateEmbedding(); err != nil {
-		return err
-	}
-	return cfg.ValidateLLM()
+	return cfg.ValidateTranscription()
 }
 
 func (cfg Config) ValidateTranscription() error {
@@ -234,17 +156,8 @@ func (cfg Config) ValidateTranscription() error {
 		"STORAGE_BUCKET": cfg.StorageBucket, "STORAGE_ACCESS_KEY": cfg.StorageAccessKey,
 		"STORAGE_SECRET_KEY": cfg.StorageSecretKey,
 	} {
-		if value == "" {
+		if value == "" || cfg.SecureEnvironment() && placeholder(value) {
 			missing = append(missing, key)
-		}
-	}
-	if cfg.SecureEnvironment() {
-		for key, value := range map[string]string{
-			"ASR_API_KEY": cfg.ASRAPIKey, "STORAGE_ACCESS_KEY": cfg.StorageAccessKey, "STORAGE_SECRET_KEY": cfg.StorageSecretKey,
-		} {
-			if placeholder(value) {
-				missing = append(missing, key)
-			}
 		}
 	}
 	if len(missing) > 0 {
@@ -256,48 +169,6 @@ func (cfg Config) ValidateTranscription() error {
 
 func (cfg Config) TranscriptionEnabled() bool {
 	return cfg.ValidateTranscription() == nil
-}
-
-func (cfg Config) ValidateEmbedding() error {
-	missing := make([]string, 0, 2)
-	if cfg.EmbeddingProvider == "" {
-		missing = append(missing, "EMBEDDING_PROVIDER")
-	}
-	if cfg.EmbeddingAPIKey == "" {
-		missing = append(missing, "EMBEDDING_API_KEY")
-	}
-	if cfg.SecureEnvironment() && placeholder(cfg.EmbeddingAPIKey) {
-		missing = append(missing, "EMBEDDING_API_KEY")
-	}
-	if len(missing) > 0 {
-		return fmt.Errorf("semantic search requires %s", strings.Join(missing, ", "))
-	}
-	return nil
-}
-
-func (cfg Config) EmbeddingEnabled() bool {
-	return cfg.ValidateEmbedding() == nil
-}
-
-func (cfg Config) ValidateLLM() error {
-	missing := make([]string, 0, 2)
-	if cfg.LLMProvider == "" {
-		missing = append(missing, "LLM_PROVIDER")
-	}
-	if cfg.LLMAPIKey == "" {
-		missing = append(missing, "LLM_API_KEY")
-	}
-	if cfg.SecureEnvironment() && placeholder(cfg.LLMAPIKey) {
-		missing = append(missing, "LLM_API_KEY")
-	}
-	if len(missing) > 0 {
-		return fmt.Errorf("AI requires %s", strings.Join(missing, ", "))
-	}
-	return nil
-}
-
-func (cfg Config) LLMEnabled() bool {
-	return cfg.ValidateLLM() == nil
 }
 
 func envOrDefault(key, fallback string) string {
@@ -346,5 +217,6 @@ func validateSecureDatabaseURL(raw, expectedDatabase string, budget int) error {
 
 func placeholder(value string) bool {
 	value = strings.TrimSpace(value)
-	return strings.EqualFold(value, "CHANGE_ME") || strings.EqualFold(value, "CHANGEME")
+	value = strings.ToUpper(value)
+	return strings.HasPrefix(value, "CHANGE_ME") || strings.HasPrefix(value, "CHANGEME")
 }

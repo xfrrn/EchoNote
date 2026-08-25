@@ -256,12 +256,8 @@ func (w *Worker) jobLoggers(job db.Job) (*slog.Logger, *slog.Logger) {
 
 func providerForJob(jobType string) string {
 	switch jobType {
-	case "submit_asr", "poll_asr", "ingest_asr_result", "cancel_asr":
+	case "submit_asr", "poll_asr", "ingest_asr_result":
 		return "aliyun_asr"
-	case "generate_embeddings":
-		return "aliyun_embedding"
-	case "generate_ai_artifact":
-		return "aliyun_llm"
 	case "cleanup_audio":
 		return "aliyun_oss"
 	default:

@@ -3,7 +3,6 @@ package database
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -61,32 +60,6 @@ WHERE role.rolname = current_user`).Scan(
 	}
 	if superuser || createDatabase || createRole || bypassRLS || databaseCreate || schemaCreate {
 		return fmt.Errorf("PostgreSQL runtime role %q has schema or administrative privileges", user)
-	}
-
-	rows, err := pool.Query(ctx, `SELECT extname FROM pg_extension WHERE extname = ANY($1::text[])`, []string{"pg_trgm", "vector"})
-	if err != nil {
-		return fmt.Errorf("inspect PostgreSQL extensions: %w", err)
-	}
-	defer rows.Close()
-	found := make(map[string]bool, 2)
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return fmt.Errorf("scan PostgreSQL extension: %w", err)
-		}
-		found[name] = true
-	}
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("list PostgreSQL extensions: %w", err)
-	}
-	missing := make([]string, 0, 2)
-	for _, name := range []string{"pg_trgm", "vector"} {
-		if !found[name] {
-			missing = append(missing, name)
-		}
-	}
-	if len(missing) > 0 {
-		return fmt.Errorf("PostgreSQL is missing required extensions: %s", strings.Join(missing, ", "))
 	}
 	return nil
 }

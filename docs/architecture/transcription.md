@@ -15,14 +15,13 @@
 
 固定参数如需调整，必须先修改本文件和相应测试，不能只改 Worker 常量。
 
-## 输入与档位
+## 输入与模型
 
 ```text
-economy → aliyun / paraformer-v2
 quality → aliyun / fun-asr
 ```
 
-两档都开启 `diarization_enabled`。Paraformer 同时开启时间戳对齐，确保句子和词都有毫秒时间戳。阿里云离线 ASR 接受 FLAC，且开启说话人分离时建议单个音频不超过 2 小时；EchoNote 因此统一预处理为 16 kHz、单声道 FLAC。
+服务固定使用质量档并开启 `diarization_enabled`。阿里云离线 ASR 接受 FLAC，且开启说话人分离时建议单个音频不超过 2 小时；EchoNote 因此统一预处理为 16 kHz、单声道 FLAC。
 
 官方契约：
 
@@ -137,7 +136,7 @@ midpoint = start_ms + (end_ms - start_ms) / 2
 → 保留旧 Version
 ```
 
-任何时候同一 Episode 最多一个 `is_active=true`。ASR 生成的 Version 内容不被下一次转录覆盖。用户重命名与合并 Speaker 属于当前 Version 的人工校正元数据；合并会更新该 Version 的 Segment Speaker。Phase 6 已在同一事务创建 Search 重建 Job；Phase 7 已在同一事务把关联 AI Artifact 标记为 stale 并取消未完成的生成 Job。
+任何时候同一 Episode 最多一个 `is_active=true`。新的成功转录会激活新 Version，旧 Version 仅作为内部恢复记录保留。
 
 ## Job 工作流
 

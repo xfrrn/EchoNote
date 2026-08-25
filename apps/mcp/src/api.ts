@@ -1,11 +1,18 @@
+export type AuthenticatedIdentity = {
+  issuer: string
+  subject: string
+  email?: string
+}
+
 export type EchoNoteClientConfig = {
-  baseUrl: string
+  baseUrl: URL
+  internalToken: string
+  identity: AuthenticatedIdentity
 }
 
 type RequestOptions = {
   method?: string
   body?: unknown
-  accept?: string
 }
 
 export class EchoNoteApiError extends Error {
@@ -20,47 +27,37 @@ export class EchoNoteApiError extends Error {
 }
 
 export class EchoNoteClient {
-  private readonly baseUrl: URL
+  constructor(
+    private readonly config: EchoNoteClientConfig,
+    private readonly fetcher: typeof fetch = fetch,
+  ) {}
 
-  constructor(config: EchoNoteClientConfig, private readonly fetcher: typeof fetch = fetch) {
-    this.baseUrl = new URL(config.baseUrl)
-  }
-
-  static fromEnv(): EchoNoteClient {
-    return new EchoNoteClient({
-      baseUrl: process.env.ECHONOTE_API_URL ?? 'http://127.0.0.1:8080',
+  async json<T>(path: string, options: RequestOptions = {}): Promise<T> {
+    const headers = new Headers({
+      Accept: 'application/json',
+      Authorization: `Bearer ${this.config.internalToken}`,
+      'X-EchoNote-Auth-Issuer': this.config.identity.issuer,
+      'X-EchoNote-Auth-Subject': this.config.identity.subject,
     })
-  }
-
-  json(path: string, options: RequestOptions = {}): Promise<unknown> {
-    return this.request(path, options).then(async response => {
-      if (response.status === 204) return { ok: true }
-      return response.json()
-    })
-  }
-
-  text(path: string, options: RequestOptions = {}): Promise<string> {
-    return this.request(path, options).then(response => response.text())
-  }
-
-  private async request(path: string, options: RequestOptions): Promise<Response> {
-    const method = options.method ?? 'GET'
-    const headers = new Headers({ Accept: options.accept ?? 'application/json' })
+    if (this.config.identity.email) headers.set('X-EchoNote-Auth-Email', this.config.identity.email)
     if (options.body !== undefined) headers.set('Content-Type', 'application/json')
 
     let response: Response
     try {
-      response = await this.fetcher(new URL(path, this.baseUrl), {
-        method,
+      response = await this.fetcher(new URL(path, this.config.baseUrl), {
+        method: options.method ?? 'GET',
         headers,
         body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        signal: AbortSignal.timeout(30_000),
       })
     } catch (error) {
-      throw new Error(`Cannot reach EchoNote API at ${this.baseUrl.origin}: ${error instanceof Error ? error.message : error}`)
+      throw new Error(
+        `Cannot reach EchoNote API at ${this.config.baseUrl.origin}: ${error instanceof Error ? error.message : error}`,
+      )
     }
 
     if (!response.ok) throw await apiError(response)
-    return response
+    return response.json() as Promise<T>
   }
 }
 
@@ -73,25 +70,4 @@ async function apiError(response: Response): Promise<EchoNoteApiError> {
   } catch {
     return new EchoNoteApiError(response.status, 'HTTP_ERROR', raw || response.statusText, requestId)
   }
-}
-
-export type SSEEvent = { event: string; data: string }
-
-export function parseSSE(payload: string): SSEEvent[] {
-  return payload
-    .replaceAll('\r\n', '\n')
-    .split(/\n\n+/)
-    .flatMap(block => {
-      let event = 'message'
-      const data: string[] = []
-      for (const line of block.split('\n')) {
-        if (!line || line.startsWith(':')) continue
-        const separator = line.indexOf(':')
-        const field = separator < 0 ? line : line.slice(0, separator)
-        const value = separator < 0 ? '' : line.slice(separator + 1).replace(/^ /, '')
-        if (field === 'event') event = value
-        if (field === 'data') data.push(value)
-      }
-      return data.length ? [{ event, data: data.join('\n') }] : []
-    })
 }

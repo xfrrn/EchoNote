@@ -1,8 +1,5 @@
 BEGIN;
 
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
-CREATE EXTENSION IF NOT EXISTS vector;
-
 CREATE TABLE search_documents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL,
@@ -28,7 +25,7 @@ CREATE TABLE search_chunks (
     start_ms BIGINT,
     end_ms BIGINT,
     speaker_id UUID REFERENCES transcript_speakers(id) ON DELETE SET NULL,
-    embedding vector(1024),
+    embedding TEXT,
     embedding_model TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),

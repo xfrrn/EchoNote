@@ -215,33 +215,6 @@ func (provider *Aliyun) FetchResult(ctx context.Context, resultURL string) (doma
 	return domain.RawResult{Raw: raw, Segments: segments}, nil
 }
 
-func (provider *Aliyun) Cancel(ctx context.Context, taskID string) error {
-	if strings.TrimSpace(taskID) == "" {
-		return nil
-	}
-	request, err := provider.request(ctx, http.MethodPost, provider.baseURL+"/tasks/"+url.PathEscape(taskID)+"/cancel", nil)
-	if err != nil {
-		return err
-	}
-	response, err := provider.httpClient.Do(request)
-	if err != nil {
-		return &ProviderError{Operation: "cancel", Message: err.Error(), retryable: true}
-	}
-	defer response.Body.Close()
-	body, readErr := readLimited(response.Body, maxAPIResponseBytes)
-	if readErr != nil {
-		return readErr
-	}
-	if response.StatusCode >= 200 && response.StatusCode < 300 {
-		return nil
-	}
-	providerError := responseError("cancel", response.StatusCode, body, false)
-	if providerError.ProviderCode == "UnsupportedOperation" {
-		return nil
-	}
-	return providerError
-}
-
 func (provider *Aliyun) request(ctx context.Context, method, target string, body io.Reader) (*http.Request, error) {
 	request, err := http.NewRequestWithContext(ctx, method, target, body)
 	if err != nil {

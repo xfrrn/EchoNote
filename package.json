@@ -8,7 +8,6 @@
   "scripts": {
     "build": "pnpm --filter @echonote/mcp build",
     "test": "pnpm --filter @echonote/mcp test",
-    "mcp": "pnpm --filter @echonote/mcp build && pnpm --filter @echonote/mcp start",
-    "mcp:http": "pnpm --filter @echonote/mcp build && pnpm --filter @echonote/mcp start:http"
+    "mcp": "pnpm --filter @echonote/mcp build && pnpm --filter @echonote/mcp start"
   }
 }

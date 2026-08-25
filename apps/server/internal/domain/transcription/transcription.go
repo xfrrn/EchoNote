@@ -367,7 +367,6 @@ type ASRProvider interface {
 	Submit(context.Context, Request) (ExternalTask, error)
 	Poll(context.Context, string) (ExternalTaskStatus, error)
 	FetchResult(context.Context, string) (RawResult, error)
-	Cancel(context.Context, string) error
 }
 
 type ObjectStore interface {

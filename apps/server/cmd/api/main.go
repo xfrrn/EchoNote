@@ -13,15 +13,9 @@ import (
 
 	"github.com/Actify/echonote/apps/server/internal/config"
 	"github.com/Actify/echonote/apps/server/internal/database"
-	aidomain "github.com/Actify/echonote/apps/server/internal/domain/ai"
-	searchdomain "github.com/Actify/echonote/apps/server/internal/domain/search"
 	httpapi "github.com/Actify/echonote/apps/server/internal/http"
 	"github.com/Actify/echonote/apps/server/internal/logging"
-	"github.com/Actify/echonote/apps/server/internal/provider/embedding"
-	llmprovider "github.com/Actify/echonote/apps/server/internal/provider/llm"
-	"github.com/Actify/echonote/apps/server/internal/provider/observed"
 	"github.com/Actify/echonote/apps/server/internal/repository"
-	"github.com/Actify/echonote/apps/server/internal/service"
 	"github.com/Actify/echonote/apps/server/internal/workerruntime"
 )
 
@@ -60,47 +54,13 @@ func run(args []string) error {
 			return err
 		}
 	}
-	if _, err := pool.Exec(ctx, "INSERT INTO users (id) VALUES ($1) ON CONFLICT (id) DO NOTHING", cfg.OwnerID); err != nil {
-		return fmt.Errorf("ensure MCP owner: %w", err)
-	}
-	var embeddingProvider searchdomain.EmbeddingProvider
-	if cfg.EmbeddingEnabled() {
-		embeddingProvider, err = embedding.NewAliyun(cfg.EmbeddingEndpoint, cfg.EmbeddingAPIKey, nil)
-		if err != nil {
-			return fmt.Errorf("configure embedding: %w", err)
-		}
-		embeddingProvider = observed.WrapEmbedding(embeddingProvider, logger)
-	} else {
-		logger.Warn("semantic search disabled", "reason", cfg.ValidateEmbedding())
-	}
-	searchRepository := repository.NewSearchRepository(pool)
-	searchService := service.NewSearchService(searchRepository, embeddingProvider)
-	var llmProvider aidomain.LLMProvider
-	if cfg.LLMEnabled() {
-		llmProvider, err = llmprovider.NewAliyun(cfg.LLMEndpoint, cfg.LLMModel, cfg.LLMAPIKey, nil)
-		if err != nil {
-			return fmt.Errorf("configure LLM: %w", err)
-		}
-		llmProvider = observed.WrapLLM(llmProvider, logger)
-	} else {
-		logger.Warn("AI generation disabled", "reason", cfg.ValidateLLM())
-	}
-	aiService := service.NewAIService(repository.NewAIRepository(pool), searchService, llmProvider)
-	exportService := service.NewExportService(repository.NewExportRepository(pool))
-
 	server := &http.Server{
 		Addr: cfg.ListenAddress(),
 		Handler: httpapi.NewRouter(
 			pool,
 			repository.NewImportRepository(pool),
-			repository.NewLibraryRepository(pool),
-			repository.NewNotesRepository(pool),
-			repository.NewTranscriptionRepository(pool, cfg.ASRStandardModel, cfg.ASRQualityModel),
-			searchService,
-			aiService,
-			exportService,
-			cfg.TranscriptionAPI,
-			cfg.OwnerID,
+			repository.NewUserRepository(pool),
+			cfg.InternalToken,
 			logger,
 		),
 		ReadHeaderTimeout: 5 * time.Second,

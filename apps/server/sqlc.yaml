@@ -10,6 +10,8 @@ sql:
       - migrations/000006_ai.up.sql
       - migrations/000007_identity.up.sql
       - migrations/000008_retention.up.sql
+      - migrations/000009_mcp_identity.up.sql
+      - migrations/000010_transcription_service.up.sql
     queries: internal/database/queries
     gen:
       go:
@@ -19,9 +21,3 @@ sql:
         emit_json_tags: true
         emit_empty_slices: true
         emit_pointers_for_null_types: true
-        overrides:
-          - db_type: vector
-            nullable: true
-            go_type:
-              type: string
-              pointer: true

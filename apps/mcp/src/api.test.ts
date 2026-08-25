@@ -1,37 +1,40 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { EchoNoteApiError, EchoNoteClient, parseSSE } from './api.js'
+import { EchoNoteApiError, EchoNoteClient } from './api.js'
 
-test('forwards JSON requests without browser authentication state', async () => {
-  const calls: Array<{ url: string; init?: RequestInit }> = []
-  const fetcher: typeof fetch = async (input, init) => {
-    calls.push({ url: String(input), init })
-    return new Response('{"id":"import-1"}', { status: 202, headers: { 'Content-Type': 'application/json' } })
-  }
-  const client = new EchoNoteClient({ baseUrl: 'http://127.0.0.1:8080' }, fetcher)
+const config = {
+  baseUrl: new URL('http://127.0.0.1:8080'),
+  internalToken: '0123456789abcdef0123456789abcdef',
+  identity: { issuer: 'https://login.example.com/', subject: 'user-1', email: 'user@example.com' },
+}
 
-  assert.deepEqual(await client.json('/api/v1/imports', { method: 'POST', body: { url: 'https://example.com/feed' } }), { id: 'import-1' })
-  assert.equal(calls.length, 1)
-  assert.equal(calls[0].url, 'http://127.0.0.1:8080/api/v1/imports')
-  assert.equal(calls[0].init?.body, '{"url":"https://example.com/feed"}')
-  assert.equal(new Headers(calls[0].init?.headers).get('cookie'), null)
-  assert.equal(new Headers(calls[0].init?.headers).get('origin'), null)
+test('forwards only the verified identity to the private API', async () => {
+  let request: RequestInit | undefined
+  const client = new EchoNoteClient(config, async (_input, init) => {
+    request = init
+    return new Response('{"id":"task-1"}', { status: 202, headers: { 'Content-Type': 'application/json' } })
+  })
+
+  assert.deepEqual(
+    await client.json('/api/v1/transcriptions', { method: 'POST', body: { url: 'https://example.com/audio.mp3' } }),
+    { id: 'task-1' },
+  )
+  const headers = new Headers(request?.headers)
+  assert.equal(headers.get('authorization'), `Bearer ${config.internalToken}`)
+  assert.equal(headers.get('x-echonote-auth-issuer'), config.identity.issuer)
+  assert.equal(headers.get('x-echonote-auth-subject'), config.identity.subject)
+  assert.equal(headers.get('x-echonote-auth-email'), config.identity.email)
+  assert.equal(headers.get('cookie'), null)
 })
 
-test('preserves API error details', async () => {
-  const client = new EchoNoteClient({ baseUrl: 'http://127.0.0.1:8080' }, async () =>
-    new Response('{"code":"EPISODE_NOT_FOUND","message":"episode was not found"}', {
+test('preserves private API error details', async () => {
+  const client = new EchoNoteClient(config, async () =>
+    new Response('{"code":"TRANSCRIPTION_NOT_FOUND","message":"transcription was not found"}', {
       status: 404,
       headers: { 'X-Request-ID': 'request-1' },
     }),
   )
-  await assert.rejects(client.json('/api/v1/episodes/missing'), (error: unknown) =>
+  await assert.rejects(client.json('/api/v1/transcriptions/missing'), (error: unknown) =>
     error instanceof EchoNoteApiError && error.status === 404 && error.requestId === 'request-1',
   )
-})
-
-test('parses CRLF, comments, and multiline SSE data', () => {
-  assert.deepEqual(parseSSE(': connected\r\n\r\nevent: delta\r\ndata: {"text":\r\ndata: "hello"}\r\n\r\n'), [
-    { event: 'delta', data: '{"text":\n"hello"}' },
-  ])
 })

@@ -11,133 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const cancelRunChunks = `-- name: CancelRunChunks :exec
-UPDATE transcription_chunks
-SET status = 'canceled',
-    updated_at = now(),
-    completed_at = NULL
-WHERE transcription_run_id = $1
-  AND status NOT IN ('completed', 'canceled')
-`
-
-func (q *Queries) CancelRunChunks(ctx context.Context, runID pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, cancelRunChunks, runID)
-	return err
-}
-
-const cancelRunJobs = `-- name: CancelRunJobs :many
-UPDATE jobs
-SET status = 'canceled',
-    stage = 'canceled',
-    locked_by = NULL,
-    locked_at = NULL,
-    error_code = NULL,
-    error_message = NULL,
-    updated_at = now(),
-    completed_at = now()
-WHERE status IN ('queued', 'running')
-  AND (
-      (entity_type = 'transcription_run' AND entity_id = $1)
-      OR
-      (entity_type = 'transcription_chunk' AND entity_id IN (
-          SELECT id FROM transcription_chunks WHERE transcription_run_id = $1
-      ))
-  )
-RETURNING id, user_id, type, entity_type, entity_id, payload, status, stage, priority, attempt, max_attempts, run_after, locked_by, locked_at, error_code, error_message, created_at, updated_at, completed_at
-`
-
-func (q *Queries) CancelRunJobs(ctx context.Context, runID pgtype.UUID) ([]Job, error) {
-	rows, err := q.db.Query(ctx, cancelRunJobs, runID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []Job{}
-	for rows.Next() {
-		var i Job
-		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.Type,
-			&i.EntityType,
-			&i.EntityID,
-			&i.Payload,
-			&i.Status,
-			&i.Stage,
-			&i.Priority,
-			&i.Attempt,
-			&i.MaxAttempts,
-			&i.RunAfter,
-			&i.LockedBy,
-			&i.LockedAt,
-			&i.ErrorCode,
-			&i.ErrorMessage,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.CompletedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const cancelTranscriptionRun = `-- name: CancelTranscriptionRun :one
-UPDATE transcription_runs
-SET status = 'canceled',
-    stage = 'canceled',
-    error_code = NULL,
-    error_message = NULL,
-    updated_at = now(),
-    completed_at = now()
-WHERE id = $1
-  AND user_id = $2
-  AND status NOT IN ('completed', 'canceled')
-RETURNING id, user_id, episode_id, profile, provider, model, status, stage, version, config, source_object_key, source_audio_hash, prepared_object_key, prepared_audio_hash, duration_ms, total_chunks, completed_chunks, started_at, completed_at, error_code, error_message, audio_cleaned_at, chunks_cleaned_at, created_at, updated_at
-`
-
-type CancelTranscriptionRunParams struct {
-	RunID  pgtype.UUID `json:"run_id"`
-	UserID pgtype.UUID `json:"user_id"`
-}
-
-func (q *Queries) CancelTranscriptionRun(ctx context.Context, arg CancelTranscriptionRunParams) (TranscriptionRun, error) {
-	row := q.db.QueryRow(ctx, cancelTranscriptionRun, arg.RunID, arg.UserID)
-	var i TranscriptionRun
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.EpisodeID,
-		&i.Profile,
-		&i.Provider,
-		&i.Model,
-		&i.Status,
-		&i.Stage,
-		&i.Version,
-		&i.Config,
-		&i.SourceObjectKey,
-		&i.SourceAudioHash,
-		&i.PreparedObjectKey,
-		&i.PreparedAudioHash,
-		&i.DurationMs,
-		&i.TotalChunks,
-		&i.CompletedChunks,
-		&i.StartedAt,
-		&i.CompletedAt,
-		&i.ErrorCode,
-		&i.ErrorMessage,
-		&i.AudioCleanedAt,
-		&i.ChunksCleanedAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const clearChunkExternalTask = `-- name: ClearChunkExternalTask :exec
 UPDATE transcription_chunks
 SET external_task_id = NULL,
@@ -537,22 +410,6 @@ func (q *Queries) DeactivateTranscriptVersions(ctx context.Context, episodeID pg
 	return err
 }
 
-const deleteTranscriptSpeaker = `-- name: DeleteTranscriptSpeaker :exec
-DELETE FROM transcript_speakers
-WHERE id = $1
-  AND transcript_version_id = $2
-`
-
-type DeleteTranscriptSpeakerParams struct {
-	SpeakerID    pgtype.UUID `json:"speaker_id"`
-	TranscriptID pgtype.UUID `json:"transcript_id"`
-}
-
-func (q *Queries) DeleteTranscriptSpeaker(ctx context.Context, arg DeleteTranscriptSpeakerParams) error {
-	_, err := q.db.Exec(ctx, deleteTranscriptSpeaker, arg.SpeakerID, arg.TranscriptID)
-	return err
-}
-
 const failTranscriptionChunk = `-- name: FailTranscriptionChunk :exec
 UPDATE transcription_chunks
 SET status = 'failed',
@@ -652,6 +509,53 @@ func (q *Queries) GetActiveTranscriptVersion(ctx context.Context, arg GetActiveT
 		&i.IsActive,
 		&i.Status,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getLatestTranscriptionRunForEpisode = `-- name: GetLatestTranscriptionRunForEpisode :one
+SELECT id, user_id, episode_id, profile, provider, model, status, stage, version, config, source_object_key, source_audio_hash, prepared_object_key, prepared_audio_hash, duration_ms, total_chunks, completed_chunks, started_at, completed_at, error_code, error_message, audio_cleaned_at, chunks_cleaned_at, created_at, updated_at
+FROM transcription_runs
+WHERE episode_id = $1
+  AND user_id = $2
+ORDER BY created_at DESC, id DESC
+LIMIT 1
+`
+
+type GetLatestTranscriptionRunForEpisodeParams struct {
+	EpisodeID pgtype.UUID `json:"episode_id"`
+	UserID    pgtype.UUID `json:"user_id"`
+}
+
+func (q *Queries) GetLatestTranscriptionRunForEpisode(ctx context.Context, arg GetLatestTranscriptionRunForEpisodeParams) (TranscriptionRun, error) {
+	row := q.db.QueryRow(ctx, getLatestTranscriptionRunForEpisode, arg.EpisodeID, arg.UserID)
+	var i TranscriptionRun
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.EpisodeID,
+		&i.Profile,
+		&i.Provider,
+		&i.Model,
+		&i.Status,
+		&i.Stage,
+		&i.Version,
+		&i.Config,
+		&i.SourceObjectKey,
+		&i.SourceAudioHash,
+		&i.PreparedObjectKey,
+		&i.PreparedAudioHash,
+		&i.DurationMs,
+		&i.TotalChunks,
+		&i.CompletedChunks,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.ErrorCode,
+		&i.ErrorMessage,
+		&i.AudioCleanedAt,
+		&i.ChunksCleanedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -1016,35 +920,6 @@ func (q *Queries) ListRunChunks(ctx context.Context, runID pgtype.UUID) ([]Trans
 	return items, nil
 }
 
-const listRunExternalTaskIDs = `-- name: ListRunExternalTaskIDs :many
-SELECT external_task_id
-FROM transcription_chunks
-WHERE transcription_run_id = $1
-  AND external_task_id IS NOT NULL
-  AND status IN ('submitted', 'running', 'canceled')
-ORDER BY sequence
-`
-
-func (q *Queries) ListRunExternalTaskIDs(ctx context.Context, runID pgtype.UUID) ([]*string, error) {
-	rows, err := q.db.Query(ctx, listRunExternalTaskIDs, runID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []*string{}
-	for rows.Next() {
-		var external_task_id *string
-		if err := rows.Scan(&external_task_id); err != nil {
-			return nil, err
-		}
-		items = append(items, external_task_id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listTranscriptSegments = `-- name: ListTranscriptSegments :many
 SELECT segment.id, segment.transcript_version_id, segment.speaker_id, segment.sequence, segment.start_ms, segment.end_ms, segment.text, segment.words, segment.source_chunk_id, segment.created_at
 FROM transcript_segments AS segment
@@ -1142,55 +1017,6 @@ func (q *Queries) ListTranscriptSpeakers(ctx context.Context, arg ListTranscript
 	return items, nil
 }
 
-const listTranscriptionEventsAfter = `-- name: ListTranscriptionEventsAfter :many
-SELECT event.id, event.transcription_run_id, event.event_type, event.data, event.created_at
-FROM transcription_events AS event
-JOIN transcription_runs AS run ON run.id = event.transcription_run_id
-WHERE event.transcription_run_id = $1
-  AND run.user_id = $2
-  AND event.id > $3
-ORDER BY event.id
-LIMIT $4::int
-`
-
-type ListTranscriptionEventsAfterParams struct {
-	RunID     pgtype.UUID `json:"run_id"`
-	UserID    pgtype.UUID `json:"user_id"`
-	AfterID   int64       `json:"after_id"`
-	PageLimit int32       `json:"page_limit"`
-}
-
-func (q *Queries) ListTranscriptionEventsAfter(ctx context.Context, arg ListTranscriptionEventsAfterParams) ([]TranscriptionEvent, error) {
-	rows, err := q.db.Query(ctx, listTranscriptionEventsAfter,
-		arg.RunID,
-		arg.UserID,
-		arg.AfterID,
-		arg.PageLimit,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []TranscriptionEvent{}
-	for rows.Next() {
-		var i TranscriptionEvent
-		if err := rows.Scan(
-			&i.ID,
-			&i.TranscriptionRunID,
-			&i.EventType,
-			&i.Data,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const lockEpisodeForTranscription = `-- name: LockEpisodeForTranscription :one
 SELECT
     episode.id,
@@ -1230,38 +1056,6 @@ func (q *Queries) LockEpisodeForTranscription(ctx context.Context, arg LockEpiso
 		&i.ResolveStatus,
 		&i.TranscriptionStatus,
 		&i.AudioUrl,
-	)
-	return i, err
-}
-
-const lockTranscriptSpeaker = `-- name: LockTranscriptSpeaker :one
-SELECT speaker.id, speaker.transcript_version_id, speaker.stable_key, speaker.display_name, speaker.role, speaker.speaker_profile_id, speaker.created_at, speaker.updated_at
-FROM transcript_speakers AS speaker
-JOIN transcript_versions AS version ON version.id = speaker.transcript_version_id
-WHERE speaker.id = $1
-  AND speaker.transcript_version_id = $2
-  AND version.user_id = $3
-FOR UPDATE OF speaker
-`
-
-type LockTranscriptSpeakerParams struct {
-	SpeakerID    pgtype.UUID `json:"speaker_id"`
-	TranscriptID pgtype.UUID `json:"transcript_id"`
-	UserID       pgtype.UUID `json:"user_id"`
-}
-
-func (q *Queries) LockTranscriptSpeaker(ctx context.Context, arg LockTranscriptSpeakerParams) (TranscriptSpeaker, error) {
-	row := q.db.QueryRow(ctx, lockTranscriptSpeaker, arg.SpeakerID, arg.TranscriptID, arg.UserID)
-	var i TranscriptSpeaker
-	err := row.Scan(
-		&i.ID,
-		&i.TranscriptVersionID,
-		&i.StableKey,
-		&i.DisplayName,
-		&i.Role,
-		&i.SpeakerProfileID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -1330,24 +1124,6 @@ func (q *Queries) MarkRunChunksCleaned(ctx context.Context, runID pgtype.UUID) e
 	return err
 }
 
-const moveTranscriptSegments = `-- name: MoveTranscriptSegments :exec
-UPDATE transcript_segments
-SET speaker_id = $1
-WHERE transcript_version_id = $2
-  AND speaker_id = $3
-`
-
-type MoveTranscriptSegmentsParams struct {
-	TargetSpeakerID pgtype.UUID `json:"target_speaker_id"`
-	TranscriptID    pgtype.UUID `json:"transcript_id"`
-	SourceSpeakerID pgtype.UUID `json:"source_speaker_id"`
-}
-
-func (q *Queries) MoveTranscriptSegments(ctx context.Context, arg MoveTranscriptSegmentsParams) error {
-	_, err := q.db.Exec(ctx, moveTranscriptSegments, arg.TargetSpeakerID, arg.TranscriptID, arg.SourceSpeakerID)
-	return err
-}
-
 const nextTranscriptVersion = `-- name: NextTranscriptVersion :one
 SELECT COALESCE(max(version), 0)::int + 1
 FROM transcript_versions
@@ -1359,49 +1135,6 @@ func (q *Queries) NextTranscriptVersion(ctx context.Context, episodeID pgtype.UU
 	var column_1 int32
 	err := row.Scan(&column_1)
 	return column_1, err
-}
-
-const renameTranscriptSpeaker = `-- name: RenameTranscriptSpeaker :one
-UPDATE transcript_speakers AS speaker
-SET display_name = $1,
-    role = $2,
-    updated_at = now()
-FROM transcript_versions AS version
-WHERE speaker.id = $3
-  AND speaker.transcript_version_id = $4
-  AND version.id = speaker.transcript_version_id
-  AND version.user_id = $5
-RETURNING speaker.id, speaker.transcript_version_id, speaker.stable_key, speaker.display_name, speaker.role, speaker.speaker_profile_id, speaker.created_at, speaker.updated_at
-`
-
-type RenameTranscriptSpeakerParams struct {
-	DisplayName  string      `json:"display_name"`
-	Role         string      `json:"role"`
-	SpeakerID    pgtype.UUID `json:"speaker_id"`
-	TranscriptID pgtype.UUID `json:"transcript_id"`
-	UserID       pgtype.UUID `json:"user_id"`
-}
-
-func (q *Queries) RenameTranscriptSpeaker(ctx context.Context, arg RenameTranscriptSpeakerParams) (TranscriptSpeaker, error) {
-	row := q.db.QueryRow(ctx, renameTranscriptSpeaker,
-		arg.DisplayName,
-		arg.Role,
-		arg.SpeakerID,
-		arg.TranscriptID,
-		arg.UserID,
-	)
-	var i TranscriptSpeaker
-	err := row.Scan(
-		&i.ID,
-		&i.TranscriptVersionID,
-		&i.StableKey,
-		&i.DisplayName,
-		&i.Role,
-		&i.SpeakerProfileID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
 }
 
 const resetChunkSubmit = `-- name: ResetChunkSubmit :exec
@@ -1416,109 +1149,6 @@ WHERE id = $1
 func (q *Queries) ResetChunkSubmit(ctx context.Context, chunkID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, resetChunkSubmit, chunkID)
 	return err
-}
-
-const resetFailedChunk = `-- name: ResetFailedChunk :one
-UPDATE transcription_chunks
-SET status = CASE
-        WHEN result_url IS NOT NULL THEN 'running'
-        WHEN external_task_id IS NOT NULL THEN 'submitted'
-        WHEN object_key IS NULL THEN 'planned'
-        ELSE 'ready'
-    END,
-    raw_result_object_key = NULL,
-    normalized_result = NULL,
-    speaker_map = NULL,
-    alignment_low_confidence = false,
-    error_code = NULL,
-    error_message = NULL,
-    updated_at = now(),
-    completed_at = NULL
-WHERE id = $1
-  AND status = 'failed'
-RETURNING id, transcription_run_id, sequence, core_start_ms, core_end_ms, render_start_ms, render_end_ms, status, object_key, audio_hash, fingerprint, external_task_id, result_url, raw_result_object_key, normalized_result, speaker_map, alignment_low_confidence, error_code, error_message, created_at, updated_at, completed_at
-`
-
-func (q *Queries) ResetFailedChunk(ctx context.Context, chunkID pgtype.UUID) (TranscriptionChunk, error) {
-	row := q.db.QueryRow(ctx, resetFailedChunk, chunkID)
-	var i TranscriptionChunk
-	err := row.Scan(
-		&i.ID,
-		&i.TranscriptionRunID,
-		&i.Sequence,
-		&i.CoreStartMs,
-		&i.CoreEndMs,
-		&i.RenderStartMs,
-		&i.RenderEndMs,
-		&i.Status,
-		&i.ObjectKey,
-		&i.AudioHash,
-		&i.Fingerprint,
-		&i.ExternalTaskID,
-		&i.ResultUrl,
-		&i.RawResultObjectKey,
-		&i.NormalizedResult,
-		&i.SpeakerMap,
-		&i.AlignmentLowConfidence,
-		&i.ErrorCode,
-		&i.ErrorMessage,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.CompletedAt,
-	)
-	return i, err
-}
-
-const resetTranscriptionRun = `-- name: ResetTranscriptionRun :one
-UPDATE transcription_runs
-SET status = $1,
-    stage = $2,
-    error_code = NULL,
-    error_message = NULL,
-    completed_at = NULL,
-    updated_at = now()
-WHERE id = $3
-  AND status = 'failed'
-RETURNING id, user_id, episode_id, profile, provider, model, status, stage, version, config, source_object_key, source_audio_hash, prepared_object_key, prepared_audio_hash, duration_ms, total_chunks, completed_chunks, started_at, completed_at, error_code, error_message, audio_cleaned_at, chunks_cleaned_at, created_at, updated_at
-`
-
-type ResetTranscriptionRunParams struct {
-	Status string      `json:"status"`
-	Stage  string      `json:"stage"`
-	RunID  pgtype.UUID `json:"run_id"`
-}
-
-func (q *Queries) ResetTranscriptionRun(ctx context.Context, arg ResetTranscriptionRunParams) (TranscriptionRun, error) {
-	row := q.db.QueryRow(ctx, resetTranscriptionRun, arg.Status, arg.Stage, arg.RunID)
-	var i TranscriptionRun
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.EpisodeID,
-		&i.Profile,
-		&i.Provider,
-		&i.Model,
-		&i.Status,
-		&i.Stage,
-		&i.Version,
-		&i.Config,
-		&i.SourceObjectKey,
-		&i.SourceAudioHash,
-		&i.PreparedObjectKey,
-		&i.PreparedAudioHash,
-		&i.DurationMs,
-		&i.TotalChunks,
-		&i.CompletedChunks,
-		&i.StartedAt,
-		&i.CompletedAt,
-		&i.ErrorCode,
-		&i.ErrorMessage,
-		&i.AudioCleanedAt,
-		&i.ChunksCleanedAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
 }
 
 const setChunkIngested = `-- name: SetChunkIngested :one

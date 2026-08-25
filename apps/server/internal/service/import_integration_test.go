@@ -14,21 +14,19 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type countingResolver struct {
-	calls int
-}
+type countingResolver struct{ calls int }
 
 func (*countingResolver) CanResolve(string) bool { return true }
 
 func (r *countingResolver) Resolve(_ context.Context, rawURL string) (*domain.ResolvedEpisode, error) {
 	r.calls++
 	return &domain.ResolvedEpisode{
-		SourceType: domain.SourceDirectAudio, EpisodeTitle: "Resolved Capture",
+		SourceType: domain.SourceDirectAudio, EpisodeTitle: "Resolved audio",
 		CanonicalURL: rawURL, AudioURL: rawURL,
 	}, nil
 }
 
-func TestResolveImportHandlerProcessesPendingCaptureOnce(t *testing.T) {
+func TestResolveImportStartsOneTranscription(t *testing.T) {
 	databaseURL := os.Getenv("ECHONOTE_TEST_DATABASE_URL")
 	if databaseURL == "" {
 		t.Skip("set ECHONOTE_TEST_DATABASE_URL to run the PostgreSQL integration test")
@@ -36,7 +34,6 @@ func TestResolveImportHandlerProcessesPendingCaptureOnce(t *testing.T) {
 	if err := database.MigrateUp(databaseURL); err != nil {
 		t.Fatal(err)
 	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	pool, err := database.Open(ctx, databaseURL, "echonote-import-service-test")
@@ -53,34 +50,24 @@ func TestResolveImportHandlerProcessesPendingCaptureOnce(t *testing.T) {
 	}()
 
 	imports := repository.NewImportRepository(pool)
-	capture, err := repository.NewNotesRepository(pool).CaptureURL(
-		ctx,
-		userID,
-		randomServiceUUID(t),
-		"https://cdn.example.com/pending-capture.mp3",
-		"resolve this capture",
-		time.Now(),
-	)
+	transcriptions := repository.NewTranscriptionRepository(pool, "fun-asr")
+	task, err := imports.Create(ctx, userID, "https://cdn.example.com/audio.mp3")
 	if err != nil {
 		t.Fatal(err)
 	}
 	resolver := &countingResolver{}
-	handler := NewResolveImportHandler(imports, resolver)
-	job := db.Job{UserID: userID, EntityType: "import", EntityID: capture.ImportID}
+	handler := NewResolveImportHandler(imports, transcriptions, resolver)
+	job := db.Job{UserID: userID, EntityType: "import", EntityID: task.ID}
 
 	if err := handler(ctx, job); err != nil {
 		t.Fatal(err)
 	}
-	status, err := imports.Get(ctx, userID, capture.ImportID)
+	status, err := imports.Get(ctx, userID, task.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resolver.calls != 1 || status.EpisodeResolveStatus == nil || *status.EpisodeResolveStatus != "completed" {
+	if resolver.calls != 1 || !status.EpisodeID.Valid || !status.TranscriptionRunID.Valid || status.TranscriptionStatus != "queued" {
 		t.Fatalf("resolver calls=%d status=%+v", resolver.calls, status)
-	}
-	var title string
-	if err := pool.QueryRow(ctx, "SELECT title FROM episodes WHERE id = $1", capture.Note.EpisodeID).Scan(&title); err != nil || title != "Resolved Capture" {
-		t.Fatalf("title=%q err=%v", title, err)
 	}
 	if err := handler(ctx, job); err != nil || resolver.calls != 1 {
 		t.Fatalf("idempotent handler calls=%d err=%v", resolver.calls, err)

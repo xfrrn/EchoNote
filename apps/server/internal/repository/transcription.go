@@ -26,17 +26,15 @@ const (
 	IngestASRResultJobType   = "ingest_asr_result"
 	AlignSpeakersJobType     = "align_speakers"
 	MergeTranscriptJobType   = "merge_transcript"
-	CancelASRJobType         = "cancel_asr"
 	CleanupAudioJobType      = "cleanup_audio"
 	TranscriptionRunEntity   = "transcription_run"
 	TranscriptionChunkEntity = "transcription_chunk"
 )
 
 var (
-	ErrEpisodeNotReady           = errors.New("episode is not ready for transcription")
-	ErrTranscriptionRunning      = errors.New("episode already has an active transcription run")
-	ErrTranscriptionNotRetryable = errors.New("transcription run is not failed")
-	ErrSubmissionAmbiguous       = errors.New("ASR submission outcome is ambiguous")
+	ErrEpisodeNotReady      = errors.New("episode is not ready for transcription")
+	ErrTranscriptionRunning = errors.New("episode already has an active transcription run")
+	ErrSubmissionAmbiguous  = errors.New("ASR submission outcome is ambiguous")
 )
 
 type RunConfig struct {
@@ -45,34 +43,19 @@ type RunConfig struct {
 }
 
 type TranscriptionRepository struct {
-	pool          *pgxpool.Pool
-	standardModel string
-	qualityModel  string
+	pool  *pgxpool.Pool
+	model string
 }
 
-func NewTranscriptionRepository(pool *pgxpool.Pool, standardModel, qualityModel string) *TranscriptionRepository {
-	return &TranscriptionRepository{pool: pool, standardModel: standardModel, qualityModel: qualityModel}
+func NewTranscriptionRepository(pool *pgxpool.Pool, model string) *TranscriptionRepository {
+	return &TranscriptionRepository{pool: pool, model: model}
 }
 
 func (r *TranscriptionRepository) Create(
 	ctx context.Context,
 	userID, episodeID pgtype.UUID,
-	profile string,
-	config RunConfig,
 ) (db.TranscriptionRun, error) {
-	model := ""
-	switch profile {
-	case "economy":
-		model = r.standardModel
-	case "quality":
-		model = r.qualityModel
-	default:
-		return db.TranscriptionRun{}, errors.New("profile must be economy or quality")
-	}
-	if config.SpeakerCount != 0 && (config.SpeakerCount < 2 || config.SpeakerCount > 100) {
-		return db.TranscriptionRun{}, errors.New("speaker count must be 2-100")
-	}
-	encodedConfig, err := json.Marshal(config)
+	encodedConfig, err := json.Marshal(RunConfig{})
 	if err != nil {
 		return db.TranscriptionRun{}, err
 	}
@@ -84,8 +67,17 @@ func (r *TranscriptionRepository) Create(
 		if episode.ResolveStatus != "completed" || strings.TrimSpace(episode.AudioUrl) == "" {
 			return db.TranscriptionRun{}, ErrEpisodeNotReady
 		}
+		latest, err := queries.GetLatestTranscriptionRunForEpisode(ctx, db.GetLatestTranscriptionRunForEpisodeParams{
+			EpisodeID: episodeID, UserID: userID,
+		})
+		if err == nil && latest.Status != "failed" && latest.Status != "canceled" {
+			return latest, nil
+		}
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return db.TranscriptionRun{}, err
+		}
 		run, err := queries.CreateTranscriptionRun(ctx, db.CreateTranscriptionRunParams{
-			UserID: userID, EpisodeID: episodeID, Profile: profile, Provider: "aliyun", Model: model, Config: encodedConfig,
+			UserID: userID, EpisodeID: episodeID, Profile: "quality", Provider: "aliyun", Model: r.model, Config: encodedConfig,
 		})
 		if err != nil {
 			return db.TranscriptionRun{}, err
@@ -96,7 +88,7 @@ func (r *TranscriptionRepository) Create(
 		if _, err := enqueue(ctx, queries, runJob(run, DownloadAudioJobType, time.Time{}, nil)); err != nil {
 			return db.TranscriptionRun{}, err
 		}
-		if err := transcriptionEvent(ctx, queries, run.ID, "queued", map[string]any{"profile": profile, "model": model}); err != nil {
+		if err := transcriptionEvent(ctx, queries, run.ID, "queued", map[string]any{"model": r.model}); err != nil {
 			return db.TranscriptionRun{}, err
 		}
 		return run, nil
@@ -116,16 +108,6 @@ func (r *TranscriptionRepository) Get(ctx context.Context, userID, runID pgtype.
 		return db.TranscriptionRun{}, fmt.Errorf("get transcription: %w", err)
 	}
 	return run, nil
-}
-
-func (r *TranscriptionRepository) Events(ctx context.Context, userID, runID pgtype.UUID, afterID int64) ([]db.TranscriptionEvent, error) {
-	events, err := db.New(r.pool).ListTranscriptionEventsAfter(ctx, db.ListTranscriptionEventsAfterParams{
-		RunID: runID, UserID: userID, AfterID: afterID, PageLimit: 100,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list transcription events: %w", err)
-	}
-	return events, nil
 }
 
 func (r *TranscriptionRepository) BeginDownload(ctx context.Context, runID pgtype.UUID) (db.GetTranscriptionRunForJobRow, bool, error) {
@@ -511,9 +493,6 @@ func (r *TranscriptionRepository) ActivateTranscript(
 			}
 			return db.TranscriptVersion{}, errors.New("run is not ready to merge")
 		}
-		if _, err := queries.LockOwnedEpisodeForAI(ctx, db.LockOwnedEpisodeForAIParams{EpisodeID: run.EpisodeID, UserID: run.UserID}); err != nil {
-			return db.TranscriptVersion{}, err
-		}
 		next, err := queries.NextTranscriptVersion(ctx, run.EpisodeID)
 		if err != nil {
 			return db.TranscriptVersion{}, err
@@ -566,12 +545,6 @@ func (r *TranscriptionRepository) ActivateTranscript(
 		if err := transcriptionEvent(ctx, queries, run.ID, "completed", nil); err != nil {
 			return db.TranscriptVersion{}, err
 		}
-		if err := markEpisodeAIStale(ctx, queries, run.UserID, run.EpisodeID); err != nil {
-			return db.TranscriptVersion{}, err
-		}
-		if err := enqueueSearchBuild(ctx, queries, run.UserID, run.EpisodeID); err != nil {
-			return db.TranscriptVersion{}, err
-		}
 		if _, err := enqueue(ctx, queries, runJob(run, CleanupAudioJobType, time.Time{}, map[string]string{"scope": "audio"})); err != nil {
 			return db.TranscriptVersion{}, err
 		}
@@ -619,149 +592,6 @@ func (r *TranscriptionRepository) FailJob(ctx context.Context, job db.Job, failu
 		return run, nil
 	})
 	return wrap("fail transcription run", err)
-}
-
-func (r *TranscriptionRepository) Retry(ctx context.Context, userID, runID pgtype.UUID) (db.TranscriptionRun, error) {
-	run, err := withTx(ctx, r.pool, func(queries *db.Queries) (db.TranscriptionRun, error) {
-		run, err := queries.LockTranscriptionRun(ctx, runID)
-		if err != nil {
-			return db.TranscriptionRun{}, err
-		}
-		if run.UserID != userID {
-			return db.TranscriptionRun{}, pgx.ErrNoRows
-		}
-		if run.Status != "failed" {
-			return db.TranscriptionRun{}, ErrTranscriptionNotRetryable
-		}
-		chunks, err := queries.ListRunChunks(ctx, runID)
-		if err != nil {
-			return db.TranscriptionRun{}, err
-		}
-		status, stage, jobType := "queued", "retrying_download", DownloadAudioJobType
-		var retryChunks []db.TranscriptionChunk
-		switch {
-		case run.SourceObjectKey == nil:
-		case run.PreparedObjectKey == nil:
-			status, stage, jobType = "preparing", "retrying_prepare", PrepareAudioJobType
-		case len(chunks) == 0:
-			status, stage, jobType = "preparing", "retrying_plan", PlanTranscriptionJobType
-		default:
-			for _, chunk := range chunks {
-				if chunk.Status == "failed" {
-					reset, err := queries.ResetFailedChunk(ctx, chunk.ID)
-					if err != nil {
-						return db.TranscriptionRun{}, err
-					}
-					retryChunks = append(retryChunks, reset)
-				}
-			}
-			status, stage = "transcribing", "retrying_chunks"
-			if len(retryChunks) == 0 {
-				status, stage, jobType = "aligning", "retrying_alignment", AlignSpeakersJobType
-				allMapped := true
-				for _, chunk := range chunks {
-					allMapped = allMapped && len(chunk.SpeakerMap) > 0
-				}
-				if allMapped {
-					status, stage, jobType = "merging", "retrying_merge", MergeTranscriptJobType
-				}
-			}
-		}
-		run, err = queries.ResetTranscriptionRun(ctx, db.ResetTranscriptionRunParams{Status: status, Stage: stage, RunID: runID})
-		if err != nil {
-			return db.TranscriptionRun{}, err
-		}
-		if len(retryChunks) > 0 {
-			for _, chunk := range retryChunks {
-				kind := SubmitASRJobType
-				switch chunk.Status {
-				case "planned":
-					kind = RenderAudioChunkJobType
-				case "submitted":
-					kind = PollASRJobType
-				case "running":
-					kind = IngestASRResultJobType
-				}
-				if _, err := enqueue(ctx, queries, chunkJob(run, chunk, kind, time.Time{})); err != nil {
-					return db.TranscriptionRun{}, err
-				}
-			}
-		} else if _, err := enqueue(ctx, queries, runJob(run, jobType, time.Time{}, nil)); err != nil {
-			return db.TranscriptionRun{}, err
-		}
-		if err := queries.SetEpisodeTranscriptionStatus(ctx, db.SetEpisodeTranscriptionStatusParams{Status: "queued", EpisodeID: run.EpisodeID, UserID: run.UserID}); err != nil {
-			return db.TranscriptionRun{}, err
-		}
-		if err := transcriptionEvent(ctx, queries, run.ID, "retried", nil); err != nil {
-			return db.TranscriptionRun{}, err
-		}
-		return run, nil
-	})
-	if activeTranscriptionConflict(err) {
-		return db.TranscriptionRun{}, ErrTranscriptionRunning
-	}
-	if err != nil {
-		return db.TranscriptionRun{}, fmt.Errorf("retry transcription: %w", err)
-	}
-	return run, nil
-}
-
-func (r *TranscriptionRepository) Cancel(ctx context.Context, userID, runID pgtype.UUID) (db.TranscriptionRun, error) {
-	run, err := withTx(ctx, r.pool, func(queries *db.Queries) (db.TranscriptionRun, error) {
-		run, err := queries.CancelTranscriptionRun(ctx, db.CancelTranscriptionRunParams{RunID: runID, UserID: userID})
-		if errors.Is(err, pgx.ErrNoRows) {
-			return queries.GetTranscriptionRun(ctx, db.GetTranscriptionRunParams{RunID: runID, UserID: userID})
-		}
-		if err != nil {
-			return db.TranscriptionRun{}, err
-		}
-		if err := queries.CancelRunChunks(ctx, runID); err != nil {
-			return db.TranscriptionRun{}, err
-		}
-		jobs, err := queries.CancelRunJobs(ctx, runID)
-		if err != nil {
-			return db.TranscriptionRun{}, err
-		}
-		for _, job := range jobs {
-			if err := createEvent(ctx, queries, job, "canceled"); err != nil {
-				return db.TranscriptionRun{}, err
-			}
-		}
-		episodeStatus := "waiting"
-		if _, err := queries.GetActiveTranscriptVersion(ctx, db.GetActiveTranscriptVersionParams{EpisodeID: run.EpisodeID, UserID: run.UserID}); err == nil {
-			episodeStatus = "completed"
-		} else if !errors.Is(err, pgx.ErrNoRows) {
-			return db.TranscriptionRun{}, err
-		}
-		if err := queries.SetEpisodeTranscriptionStatus(ctx, db.SetEpisodeTranscriptionStatusParams{Status: episodeStatus, EpisodeID: run.EpisodeID, UserID: run.UserID}); err != nil {
-			return db.TranscriptionRun{}, err
-		}
-		if _, err := enqueue(ctx, queries, runJob(run, CancelASRJobType, time.Time{}, nil)); err != nil {
-			return db.TranscriptionRun{}, err
-		}
-		if err := transcriptionEvent(ctx, queries, run.ID, "canceled", nil); err != nil {
-			return db.TranscriptionRun{}, err
-		}
-		return run, nil
-	})
-	if err != nil {
-		return db.TranscriptionRun{}, fmt.Errorf("cancel transcription: %w", err)
-	}
-	return run, nil
-}
-
-func (r *TranscriptionRepository) ExternalTaskIDs(ctx context.Context, runID pgtype.UUID) ([]string, error) {
-	values, err := db.New(r.pool).ListRunExternalTaskIDs(ctx, runID)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]string, 0, len(values))
-	for _, value := range values {
-		if value != nil {
-			result = append(result, *value)
-		}
-	}
-	return result, nil
 }
 
 type CleanupObjects struct {
@@ -834,88 +664,6 @@ func (r *TranscriptionRepository) Segments(ctx context.Context, userID, transcri
 	}
 	total, err := queries.CountTranscriptSegments(ctx, db.CountTranscriptSegmentsParams{TranscriptID: transcriptID, UserID: userID})
 	return segments, total, err
-}
-
-func (r *TranscriptionRepository) RenameSpeaker(ctx context.Context, userID, transcriptID, speakerID pgtype.UUID, displayName, role string) (db.TranscriptSpeaker, error) {
-	displayName, role = strings.TrimSpace(displayName), strings.TrimSpace(role)
-	if displayName == "" {
-		return db.TranscriptSpeaker{}, errors.New("display name is required")
-	}
-	speaker, err := withTx(ctx, r.pool, func(queries *db.Queries) (db.TranscriptSpeaker, error) {
-		version, err := queries.GetTranscriptVersion(ctx, db.GetTranscriptVersionParams{TranscriptID: transcriptID, UserID: userID})
-		if err != nil {
-			return db.TranscriptSpeaker{}, err
-		}
-		if _, err := queries.LockOwnedEpisodeForAI(ctx, db.LockOwnedEpisodeForAIParams{EpisodeID: version.EpisodeID, UserID: userID}); err != nil {
-			return db.TranscriptSpeaker{}, err
-		}
-		current, err := queries.LockTranscriptSpeaker(ctx, db.LockTranscriptSpeakerParams{SpeakerID: speakerID, TranscriptID: transcriptID, UserID: userID})
-		if err != nil {
-			return db.TranscriptSpeaker{}, err
-		}
-		if role == "" {
-			role = current.Role
-		}
-		updated, err := queries.RenameTranscriptSpeaker(ctx, db.RenameTranscriptSpeakerParams{
-			DisplayName: displayName, Role: role, SpeakerID: speakerID, TranscriptID: transcriptID, UserID: userID,
-		})
-		if err != nil {
-			return db.TranscriptSpeaker{}, err
-		}
-		if err := markEpisodeAIStale(ctx, queries, userID, version.EpisodeID); err != nil {
-			return db.TranscriptSpeaker{}, err
-		}
-		if err := enqueueSearchBuild(ctx, queries, userID, version.EpisodeID); err != nil {
-			return db.TranscriptSpeaker{}, err
-		}
-		return updated, nil
-	})
-	return speaker, wrap("rename transcript speaker", err)
-}
-
-func (r *TranscriptionRepository) MergeSpeakers(ctx context.Context, userID, transcriptID, sourceID, targetID pgtype.UUID) (db.TranscriptSpeaker, error) {
-	if sourceID == targetID {
-		return db.TranscriptSpeaker{}, errors.New("source and target speakers must differ")
-	}
-	target, err := withTx(ctx, r.pool, func(queries *db.Queries) (db.TranscriptSpeaker, error) {
-		version, err := queries.GetTranscriptVersion(ctx, db.GetTranscriptVersionParams{TranscriptID: transcriptID, UserID: userID})
-		if err != nil {
-			return db.TranscriptSpeaker{}, err
-		}
-		if _, err := queries.LockOwnedEpisodeForAI(ctx, db.LockOwnedEpisodeForAIParams{EpisodeID: version.EpisodeID, UserID: userID}); err != nil {
-			return db.TranscriptSpeaker{}, err
-		}
-		firstID, secondID := sourceID, targetID
-		if firstID.String() > secondID.String() {
-			firstID, secondID = secondID, firstID
-		}
-		first, err := queries.LockTranscriptSpeaker(ctx, db.LockTranscriptSpeakerParams{SpeakerID: firstID, TranscriptID: transcriptID, UserID: userID})
-		if err != nil {
-			return db.TranscriptSpeaker{}, err
-		}
-		second, err := queries.LockTranscriptSpeaker(ctx, db.LockTranscriptSpeakerParams{SpeakerID: secondID, TranscriptID: transcriptID, UserID: userID})
-		if err != nil {
-			return db.TranscriptSpeaker{}, err
-		}
-		target := second
-		if first.ID == targetID {
-			target = first
-		}
-		if err := queries.MoveTranscriptSegments(ctx, db.MoveTranscriptSegmentsParams{TargetSpeakerID: targetID, TranscriptID: transcriptID, SourceSpeakerID: sourceID}); err != nil {
-			return db.TranscriptSpeaker{}, err
-		}
-		if err := queries.DeleteTranscriptSpeaker(ctx, db.DeleteTranscriptSpeakerParams{SpeakerID: sourceID, TranscriptID: transcriptID}); err != nil {
-			return db.TranscriptSpeaker{}, err
-		}
-		if err := markEpisodeAIStale(ctx, queries, userID, version.EpisodeID); err != nil {
-			return db.TranscriptSpeaker{}, err
-		}
-		if err := enqueueSearchBuild(ctx, queries, userID, version.EpisodeID); err != nil {
-			return db.TranscriptSpeaker{}, err
-		}
-		return target, nil
-	})
-	return target, wrap("merge transcript speakers", err)
 }
 
 func activeTranscriptionConflict(err error) bool {

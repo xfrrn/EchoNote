@@ -66,7 +66,6 @@ func (workflow *TranscriptionWorkflow) Handlers() map[string]workerapp.Handler {
 		repository.IngestASRResultJobType:   workflow.wrap(workflow.ingest),
 		repository.AlignSpeakersJobType:     workflow.wrap(workflow.align),
 		repository.MergeTranscriptJobType:   workflow.wrap(workflow.merge),
-		repository.CancelASRJobType:         workflow.wrap(workflow.cancel),
 		repository.CleanupAudioJobType:      workflow.wrap(workflow.cleanup),
 	}
 }
@@ -347,24 +346,6 @@ func (workflow *TranscriptionWorkflow) merge(ctx context.Context, job db.Job) er
 	}
 	_, err = workflow.repository.ActivateTranscript(ctx, run.ID, domain.SpeakersFromChunks(domainChunks), segments)
 	return err
-}
-
-func (workflow *TranscriptionWorkflow) cancel(ctx context.Context, job db.Job) error {
-	taskIDs, err := workflow.repository.ExternalTaskIDs(ctx, job.EntityID)
-	if err != nil {
-		return err
-	}
-	var result error
-	for _, taskID := range taskIDs {
-		result = errors.Join(result, workflow.asr.Cancel(ctx, taskID))
-	}
-	if result != nil {
-		return result
-	}
-	if err := workflow.cleanupScope(ctx, job.EntityID, "audio"); err != nil {
-		return err
-	}
-	return workflow.cleanupScope(ctx, job.EntityID, "chunks")
 }
 
 func (workflow *TranscriptionWorkflow) cleanup(ctx context.Context, job db.Job) error {

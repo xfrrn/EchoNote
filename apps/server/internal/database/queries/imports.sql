@@ -15,18 +15,42 @@ SELECT
     import_record.id,
     import_record.submitted_url,
     import_record.episode_id,
-    episode.resolve_status AS episode_resolve_status,
-    COALESCE(job.status, CASE WHEN episode.resolve_status = 'completed' THEN 'succeeded' ELSE 'failed' END)::text AS status,
-    COALESCE(job.stage, CASE WHEN episode.resolve_status = 'completed' THEN 'completed' ELSE 'expired' END)::text AS stage,
+    episode.title,
+    episode.duration_ms,
+    COALESCE(job.status, CASE WHEN episode.resolve_status = 'completed' THEN 'succeeded' ELSE 'failed' END)::text AS import_status,
+    COALESCE(job.stage, CASE WHEN episode.resolve_status = 'completed' THEN 'completed' ELSE 'expired' END)::text AS import_stage,
     job.error_code,
     job.error_message,
+    run.id AS transcription_run_id,
+    COALESCE(run.status, '')::text AS transcription_status,
+    COALESCE(run.stage, '')::text AS transcription_stage,
+    COALESCE(run.total_chunks, 0)::integer AS total_chunks,
+    COALESCE(run.completed_chunks, 0)::integer AS completed_chunks,
+    run.error_code AS transcription_error_code,
+    run.error_message AS transcription_error_message,
+    transcript.id AS transcript_id,
     import_record.created_at,
-    GREATEST(import_record.updated_at, COALESCE(job.updated_at, import_record.updated_at))::timestamptz AS updated_at
+    GREATEST(
+        import_record.updated_at,
+        COALESCE(job.updated_at, import_record.updated_at),
+        COALESCE(run.updated_at, import_record.updated_at)
+    )::timestamptz AS updated_at
 FROM imports AS import_record
 LEFT JOIN jobs AS job ON job.id = import_record.job_id
 LEFT JOIN episodes AS episode
   ON episode.id = import_record.episode_id
  AND episode.user_id = import_record.user_id
+LEFT JOIN LATERAL (
+    SELECT candidate.*
+    FROM transcription_runs AS candidate
+    WHERE candidate.episode_id = import_record.episode_id
+      AND candidate.user_id = import_record.user_id
+    ORDER BY candidate.created_at DESC, candidate.id DESC
+    LIMIT 1
+) AS run ON true
+LEFT JOIN transcript_versions AS transcript
+  ON transcript.transcription_run_id = run.id
+ AND transcript.user_id = import_record.user_id
 WHERE import_record.id = sqlc.arg(import_id)
   AND import_record.user_id = sqlc.arg(user_id);
 
@@ -38,35 +62,9 @@ WHERE import_record.id = sqlc.arg(import_id)
   AND import_record.user_id = sqlc.arg(user_id)
 FOR UPDATE OF import_record;
 
--- name: UpsertPodcast :one
-INSERT INTO podcasts (
-    user_id,
-    title,
-    author,
-    description,
-    cover_url,
-    feed_url
-) VALUES (
-    sqlc.arg(user_id),
-    sqlc.arg(title),
-    sqlc.arg(author),
-    sqlc.arg(description),
-    sqlc.arg(cover_url),
-    sqlc.arg(feed_url)
-)
-ON CONFLICT (user_id, feed_url) WHERE feed_url IS NOT NULL
-DO UPDATE SET
-    title = EXCLUDED.title,
-    author = CASE WHEN EXCLUDED.author <> '' THEN EXCLUDED.author ELSE podcasts.author END,
-    description = CASE WHEN EXCLUDED.description <> '' THEN EXCLUDED.description ELSE podcasts.description END,
-    cover_url = CASE WHEN EXCLUDED.cover_url <> '' THEN EXCLUDED.cover_url ELSE podcasts.cover_url END,
-    updated_at = now()
-RETURNING *;
-
 -- name: CreateEpisode :one
 INSERT INTO episodes (
     user_id,
-    podcast_id,
     title,
     description,
     published_at,
@@ -75,7 +73,6 @@ INSERT INTO episodes (
     resolve_status
 ) VALUES (
     sqlc.arg(user_id),
-    sqlc.narg(podcast_id)::uuid,
     sqlc.arg(title),
     sqlc.arg(description),
     sqlc.narg(published_at)::timestamptz,
@@ -87,12 +84,7 @@ RETURNING *;
 
 -- name: EnrichEpisode :one
 UPDATE episodes
-SET podcast_id = COALESCE(episodes.podcast_id, sqlc.narg(podcast_id)::uuid),
-    title = CASE
-        WHEN episodes.podcast_id IS NULL AND sqlc.narg(podcast_id)::uuid IS NOT NULL
-        THEN sqlc.arg(title)
-        ELSE episodes.title
-    END,
+SET title = CASE WHEN episodes.title = '' THEN sqlc.arg(title) ELSE episodes.title END,
     description = CASE WHEN episodes.description = '' THEN sqlc.arg(description) ELSE episodes.description END,
     published_at = COALESCE(episodes.published_at, sqlc.narg(published_at)::timestamptz),
     duration_ms = CASE WHEN episodes.duration_ms = 0 THEN sqlc.arg(duration_ms) ELSE episodes.duration_ms END,
@@ -152,3 +144,17 @@ SET episode_id = sqlc.arg(episode_id),
     updated_at = now()
 WHERE id = sqlc.arg(import_id)
   AND user_id = sqlc.arg(user_id);
+
+-- name: ListTranscriptionTaskSegments :many
+SELECT
+    segment.start_ms,
+    segment.text,
+    speaker.display_name AS speaker_name
+FROM transcript_segments AS segment
+JOIN transcript_speakers AS speaker ON speaker.id = segment.speaker_id
+JOIN transcript_versions AS transcript ON transcript.id = segment.transcript_version_id
+JOIN imports AS import_record ON import_record.episode_id = transcript.episode_id
+WHERE import_record.id = sqlc.arg(import_id)
+  AND import_record.user_id = sqlc.arg(user_id)
+  AND transcript.is_active
+ORDER BY segment.sequence;

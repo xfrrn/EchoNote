@@ -34,6 +34,14 @@ INSERT INTO transcription_runs (
 )
 RETURNING *;
 
+-- name: GetLatestTranscriptionRunForEpisode :one
+SELECT *
+FROM transcription_runs
+WHERE episode_id = sqlc.arg(episode_id)
+  AND user_id = sqlc.arg(user_id)
+ORDER BY created_at DESC, id DESC
+LIMIT 1;
+
 -- name: GetTranscriptionRun :one
 SELECT *
 FROM transcription_runs
@@ -71,16 +79,6 @@ WHERE id = sqlc.arg(episode_id)
 INSERT INTO transcription_events (transcription_run_id, event_type, data)
 VALUES (sqlc.arg(run_id), sqlc.arg(event_type), sqlc.arg(data)::jsonb)
 RETURNING *;
-
--- name: ListTranscriptionEventsAfter :many
-SELECT event.*
-FROM transcription_events AS event
-JOIN transcription_runs AS run ON run.id = event.transcription_run_id
-WHERE event.transcription_run_id = sqlc.arg(run_id)
-  AND run.user_id = sqlc.arg(user_id)
-  AND event.id > sqlc.arg(after_id)
-ORDER BY event.id
-LIMIT sqlc.arg(page_limit)::int;
 
 -- name: SetRunDownloadStarted :one
 UPDATE transcription_runs
@@ -384,87 +382,6 @@ SET status = 'failed',
 WHERE id = sqlc.arg(chunk_id)
   AND status NOT IN ('completed', 'failed', 'canceled');
 
--- name: ResetTranscriptionRun :one
-UPDATE transcription_runs
-SET status = sqlc.arg(status),
-    stage = sqlc.arg(stage),
-    error_code = NULL,
-    error_message = NULL,
-    completed_at = NULL,
-    updated_at = now()
-WHERE id = sqlc.arg(run_id)
-  AND status = 'failed'
-RETURNING *;
-
--- name: ResetFailedChunk :one
-UPDATE transcription_chunks
-SET status = CASE
-        WHEN result_url IS NOT NULL THEN 'running'
-        WHEN external_task_id IS NOT NULL THEN 'submitted'
-        WHEN object_key IS NULL THEN 'planned'
-        ELSE 'ready'
-    END,
-    raw_result_object_key = NULL,
-    normalized_result = NULL,
-    speaker_map = NULL,
-    alignment_low_confidence = false,
-    error_code = NULL,
-    error_message = NULL,
-    updated_at = now(),
-    completed_at = NULL
-WHERE id = sqlc.arg(chunk_id)
-  AND status = 'failed'
-RETURNING *;
-
--- name: CancelTranscriptionRun :one
-UPDATE transcription_runs
-SET status = 'canceled',
-    stage = 'canceled',
-    error_code = NULL,
-    error_message = NULL,
-    updated_at = now(),
-    completed_at = now()
-WHERE id = sqlc.arg(run_id)
-  AND user_id = sqlc.arg(user_id)
-  AND status NOT IN ('completed', 'canceled')
-RETURNING *;
-
--- name: CancelRunChunks :exec
-UPDATE transcription_chunks
-SET status = 'canceled',
-    updated_at = now(),
-    completed_at = NULL
-WHERE transcription_run_id = sqlc.arg(run_id)
-  AND status NOT IN ('completed', 'canceled');
-
--- name: CancelRunJobs :many
-UPDATE jobs
-SET status = 'canceled',
-    stage = 'canceled',
-    locked_by = NULL,
-    locked_at = NULL,
-    error_code = NULL,
-    error_message = NULL,
-    updated_at = now(),
-    completed_at = now()
-WHERE status IN ('queued', 'running')
-  AND (
-      (entity_type = 'transcription_run' AND entity_id = sqlc.arg(run_id))
-      OR
-      (entity_type = 'transcription_chunk' AND entity_id IN (
-          SELECT id FROM transcription_chunks WHERE transcription_run_id = sqlc.arg(run_id)
-      ))
-  )
-RETURNING *;
-
--- name: ListRunExternalTaskIDs :many
-SELECT external_task_id
-FROM transcription_chunks
-WHERE transcription_run_id = sqlc.arg(run_id)
-  AND external_task_id IS NOT NULL
-  AND status IN ('submitted', 'running', 'canceled')
-ORDER BY sequence;
-
 -- name: ListRunChunkObjectKeys :many
 SELECT object_key
 FROM transcription_chunks
@@ -521,35 +438,3 @@ FROM transcript_segments AS segment
 JOIN transcript_versions AS version ON version.id = segment.transcript_version_id
 WHERE segment.transcript_version_id = sqlc.arg(transcript_id)
   AND version.user_id = sqlc.arg(user_id);
-
--- name: RenameTranscriptSpeaker :one
-UPDATE transcript_speakers AS speaker
-SET display_name = sqlc.arg(display_name),
-    role = sqlc.arg(role),
-    updated_at = now()
-FROM transcript_versions AS version
-WHERE speaker.id = sqlc.arg(speaker_id)
-  AND speaker.transcript_version_id = sqlc.arg(transcript_id)
-  AND version.id = speaker.transcript_version_id
-  AND version.user_id = sqlc.arg(user_id)
-RETURNING speaker.*;
-
--- name: LockTranscriptSpeaker :one
-SELECT speaker.*
-FROM transcript_speakers AS speaker
-JOIN transcript_versions AS version ON version.id = speaker.transcript_version_id
-WHERE speaker.id = sqlc.arg(speaker_id)
-  AND speaker.transcript_version_id = sqlc.arg(transcript_id)
-  AND version.user_id = sqlc.arg(user_id)
-FOR UPDATE OF speaker;
-
--- name: MoveTranscriptSegments :exec
-UPDATE transcript_segments
-SET speaker_id = sqlc.arg(target_speaker_id)
-WHERE transcript_version_id = sqlc.arg(transcript_id)
-  AND speaker_id = sqlc.arg(source_speaker_id);
-
--- name: DeleteTranscriptSpeaker :exec
-DELETE FROM transcript_speakers
-WHERE id = sqlc.arg(speaker_id)
-  AND transcript_version_id = sqlc.arg(transcript_id);

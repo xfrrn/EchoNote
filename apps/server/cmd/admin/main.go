@@ -22,8 +22,8 @@ func main() {
 }
 
 func run(args []string) error {
-	if len(args) != 2 || args[0] != "retry-cleanup" {
-		return fmt.Errorf("usage: admin retry-cleanup <job-id>")
+	if len(args) < 2 {
+		return fmt.Errorf("usage: admin retry-cleanup <job-id> | admin bind-identity <user-id> <issuer> <subject>")
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -41,16 +41,38 @@ func run(args []string) error {
 			return err
 		}
 	}
-	var jobID pgtype.UUID
-	if err := jobID.Scan(args[1]); err != nil {
-		return fmt.Errorf("job ID must be a UUID")
+	logger := logging.New("echonote-admin", cfg.Environment, cfg.LogLevel)
+	switch args[0] {
+	case "retry-cleanup":
+		if len(args) != 2 {
+			return fmt.Errorf("usage: admin retry-cleanup <job-id>")
+		}
+		var jobID pgtype.UUID
+		if err := jobID.Scan(args[1]); err != nil {
+			return fmt.Errorf("job ID must be a UUID")
+		}
+		job, err := repository.NewJobQueue(pool).RetryFailedCleanup(ctx, jobID)
+		if err != nil {
+			return err
+		}
+		logger.Info("cleanup job queued for manual retry", "job_id", formatUUID(job.ID))
+		return nil
+	case "bind-identity":
+		if len(args) != 4 {
+			return fmt.Errorf("usage: admin bind-identity <user-id> <issuer> <subject>")
+		}
+		var userID pgtype.UUID
+		if err := userID.Scan(args[1]); err != nil {
+			return fmt.Errorf("user ID must be a UUID")
+		}
+		if err := repository.NewUserRepository(pool).Bind(ctx, userID, args[2], args[3]); err != nil {
+			return err
+		}
+		logger.Info("legacy user bound to OAuth identity", "user_id", formatUUID(userID))
+		return nil
+	default:
+		return fmt.Errorf("usage: admin retry-cleanup <job-id> | admin bind-identity <user-id> <issuer> <subject>")
 	}
-	job, err := repository.NewJobQueue(pool).RetryFailedCleanup(ctx, jobID)
-	if err != nil {
-		return err
-	}
-	logging.New("echonote-admin", cfg.Environment, cfg.LogLevel).Info("cleanup job queued for manual retry", "job_id", formatUUID(job.ID))
-	return nil
 }
 
 func formatUUID(id pgtype.UUID) string {

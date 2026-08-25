@@ -1,79 +1,40 @@
-# EchoNote 内部服务
+# EchoNote 内部转录服务
 
-该 Go 模块只实现 EchoNote MCP 所需的本机数据与任务能力，不是公共 Web API。
+该 Go 模块只提供 MCP 所需的私有转录 API、任务队列和 Worker。API 必须监听回环地址，并要求 `ECHONOTE_INTERNAL_TOKEN` 以及 MCP 注入的已验证 OAuth 身份。
 
-## 启动
-
-要求 Go 1.25+、PostgreSQL、pgvector、`pg_trgm`、FFmpeg 与 FFprobe。
+## 进程
 
 ```powershell
-$env:DATABASE_URL = 'postgres://postgres:postgres@localhost:5432/echonote?sslmode=disable'
-$env:ECHONOTE_OWNER_ID = '00000000-0000-4000-8000-000000000001'
+go run ./cmd/migrate up
 go run ./cmd/api
+go run ./cmd/worker
 ```
 
-`ECHONOTE_OWNER_ID` 是 MCP 服务的数据所有者，不是登录用户。所有业务查询仍用该 ID 隔离数据。API 默认监听 `127.0.0.1:8080`，配置为非回环地址会拒绝启动。
+development/test 下 `cmd/api` 会自动迁移并内嵌 Worker；staging/production 必须单独运行三个进程。必填配置见仓库根目录 [.env.example](../../.env.example)。
 
-development/test 会自动应用 Migration，并在 API 进程内启动 Worker；staging/production 使用独立 `cmd/worker`。Migration 9 删除旧网页认证的 Session 表、用户名与密码字段。
+内部 HTTP 契约只有：
 
-## 可选 Provider
+- `POST /api/v1/transcriptions`
+- `GET /api/v1/transcriptions/{taskId}`
+- `GET /healthz`
+- `GET /readyz`
 
-未配置 ASR/对象存储时，导入、笔记与已有 Transcript 读取仍可运行；新转写不可用。
+不要将 `SERVER_HOST` 改为公网地址。公网 OAuth 校验位于 `apps/mcp`，Go API 的内部密钥用于阻止其他本机进程伪造身份。
 
-```text
-ASR_PROVIDER=aliyun
-ASR_API_KEY=...
-ASR_STANDARD_MODEL=paraformer-v2
-ASR_QUALITY_MODEL=fun-asr
-STORAGE_PROVIDER=aliyun_oss
-STORAGE_REGION=cn-beijing
-STORAGE_BUCKET=...
-STORAGE_ACCESS_KEY=...
-STORAGE_SECRET_KEY=...
-```
+## 用户运维
 
-未配置 Embedding 时使用关键词搜索：
-
-```text
-EMBEDDING_PROVIDER=aliyun
-EMBEDDING_API_KEY=...
-```
-
-未配置 LLM 时，已有 Artifact/Conversation 可读，但不能生成新内容：
-
-```text
-LLM_PROVIDER=aliyun
-LLM_API_KEY=...
-LLM_MODEL=qwen-plus
-```
-
-完整配置见仓库根目录 `.env.example`。
-
-## 运维命令
+OAuth 用户首次访问会自动创建。停用用户可把 `users.status` 设为 `disabled`。如需把旧数据绑定到 OAuth 身份：
 
 ```powershell
-go run ./cmd/migrate version
-go run ./cmd/migrate down 1
-go run ./cmd/admin retry-cleanup <job-id>
-go run ./cmd/maintenance retention --dry-run
-go generate ./...
+go run ./cmd/admin bind-identity <user-id> <issuer> <subject>
 ```
 
-`down` 必须显式指定正整数步数。生产数据库升级到 Migration 9 前应备份；认证凭据和 Session 被删除后无法由 Down Migration 恢复。
+Migration 10 是不可逆的数据裁剪；升级已有数据库前先备份。
 
 ## 验证
 
 ```powershell
+go generate ./...
 go test ./...
 go vet ./...
 ```
-
-PostgreSQL 集成测试需显式提供一次性测试数据库：
-
-```text
-ECHONOTE_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/echonote_test?sslmode=disable
-ECHONOTE_SCHEMA_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/echonote_schema_test?sslmode=disable
-ECHONOTE_MIGRATION_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/echonote_migration_test?sslmode=disable
-```
-
-HTTP 契约源为 `openapi/openapi.yaml`，只供 `apps/mcp` 内部调用。转录切片与恢复算法见 `docs/architecture/transcription.md`。

@@ -43,10 +43,7 @@ func (r *ImportRepository) Create(ctx context.Context, userID pgtype.UUID, rawUR
 			return db.GetImportStatusRow{}, fmt.Errorf("create import: %w", err)
 		}
 		job, err := enqueue(ctx, queries, NewJob{
-			UserID:     userID,
-			Type:       ResolveEpisodeJobType,
-			EntityType: "import",
-			EntityID:   created.ID,
+			UserID: userID, Type: ResolveEpisodeJobType, EntityType: "import", EntityID: created.ID,
 		})
 		if err != nil {
 			return db.GetImportStatusRow{}, err
@@ -54,20 +51,22 @@ func (r *ImportRepository) Create(ctx context.Context, userID pgtype.UUID, rawUR
 		if err := queries.SetImportJob(ctx, db.SetImportJobParams{JobID: job.ID, ImportID: created.ID, UserID: userID}); err != nil {
 			return db.GetImportStatusRow{}, fmt.Errorf("attach import job: %w", err)
 		}
-		status, err := queries.GetImportStatus(ctx, db.GetImportStatusParams{ImportID: created.ID, UserID: userID})
-		if err != nil {
-			return db.GetImportStatusRow{}, fmt.Errorf("read created import: %w", err)
-		}
-		return status, nil
+		return queries.GetImportStatus(ctx, db.GetImportStatusParams{ImportID: created.ID, UserID: userID})
 	})
 }
 
 func (r *ImportRepository) Get(ctx context.Context, userID, importID pgtype.UUID) (db.GetImportStatusRow, error) {
 	status, err := db.New(r.pool).GetImportStatus(ctx, db.GetImportStatusParams{ImportID: importID, UserID: userID})
 	if err != nil {
-		return db.GetImportStatusRow{}, fmt.Errorf("get import: %w", err)
+		return db.GetImportStatusRow{}, fmt.Errorf("get transcription task: %w", err)
 	}
 	return status, nil
+}
+
+func (r *ImportRepository) Segments(ctx context.Context, userID, importID pgtype.UUID) ([]db.ListTranscriptionTaskSegmentsRow, error) {
+	return db.New(r.pool).ListTranscriptionTaskSegments(ctx, db.ListTranscriptionTaskSegmentsParams{
+		ImportID: importID, UserID: userID,
+	})
 }
 
 func (r *ImportRepository) SaveResolved(
@@ -96,21 +95,8 @@ func (r *ImportRepository) SaveResolved(
 		if importRecord.JobStatus == "canceled" {
 			return pgtype.UUID{}, ErrImportCanceled
 		}
-		captureEpisodeID := pgtype.UUID{}
 		if importRecord.EpisodeID.Valid {
-			episode, err := queries.GetEpisodeForResolve(ctx, db.GetEpisodeForResolveParams{
-				EpisodeID: importRecord.EpisodeID, UserID: userID,
-			})
-			if err != nil {
-				return pgtype.UUID{}, fmt.Errorf("lock import episode: %w", err)
-			}
-			if episode.ResolveStatus == "completed" {
-				return episode.ID, nil
-			}
-			if episode.ResolveStatus != "pending" {
-				return pgtype.UUID{}, fmt.Errorf("import episode has unexpected resolve status %q", episode.ResolveStatus)
-			}
-			captureEpisodeID = episode.ID
+			return importRecord.EpisodeID, nil
 		}
 
 		locks := make([]string, len(identityKeys))
@@ -125,64 +111,27 @@ func (r *ImportRepository) SaveResolved(
 		}
 
 		episodeID, err := queries.FindEpisodeByIdentityKeys(ctx, db.FindEpisodeByIdentityKeysParams{
-			UserID:       userID,
-			IdentityKeys: identityKeys,
+			UserID: userID, IdentityKeys: identityKeys,
 		})
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return pgtype.UUID{}, fmt.Errorf("find episode identity: %w", err)
 		}
-		episodeExists := err == nil
-		if !episodeExists && captureEpisodeID.Valid {
-			episodeID = captureEpisodeID
-			episodeExists = true
-		}
-
-		podcastID, err := upsertResolvedPodcast(ctx, queries, userID, resolved)
-		if err != nil {
-			return pgtype.UUID{}, err
-		}
-		publishedAt := nullableTimestamptz(resolved.PublishedAt)
-		switch {
-		case !episodeExists:
+		if errors.Is(err, pgx.ErrNoRows) {
 			episode, createErr := queries.CreateEpisode(ctx, db.CreateEpisodeParams{
-				UserID: userID, PodcastID: podcastID, Title: strings.TrimSpace(resolved.EpisodeTitle),
-				Description: strings.TrimSpace(resolved.Description), PublishedAt: publishedAt,
+				UserID: userID, Title: strings.TrimSpace(resolved.EpisodeTitle),
+				Description: strings.TrimSpace(resolved.Description), PublishedAt: nullableTimestamptz(resolved.PublishedAt),
 				DurationMs: max(resolved.DurationMS, 0), CoverUrl: strings.TrimSpace(resolved.PodcastCoverURL),
 			})
 			if createErr != nil {
 				return pgtype.UUID{}, fmt.Errorf("create episode: %w", createErr)
 			}
 			episodeID = episode.ID
-		case captureEpisodeID.Valid && episodeID.Bytes == captureEpisodeID.Bytes:
-			if _, err := queries.ResolvePendingEpisode(ctx, db.ResolvePendingEpisodeParams{
-				PodcastID: podcastID, Title: strings.TrimSpace(resolved.EpisodeTitle),
-				Description: strings.TrimSpace(resolved.Description), PublishedAt: publishedAt,
-				DurationMs: max(resolved.DurationMS, 0), CoverUrl: strings.TrimSpace(resolved.PodcastCoverURL),
-				EpisodeID: episodeID, UserID: userID,
-			}); err != nil {
-				return pgtype.UUID{}, fmt.Errorf("resolve pending episode: %w", err)
-			}
-		default:
-			if _, err := queries.EnrichEpisode(ctx, db.EnrichEpisodeParams{
-				PodcastID: podcastID, Title: strings.TrimSpace(resolved.EpisodeTitle),
-				Description: strings.TrimSpace(resolved.Description), PublishedAt: publishedAt,
-				DurationMs: max(resolved.DurationMS, 0), CoverUrl: strings.TrimSpace(resolved.PodcastCoverURL),
-				EpisodeID: episodeID, UserID: userID,
-			}); err != nil {
-				return pgtype.UUID{}, fmt.Errorf("enrich episode: %w", err)
-			}
-			if captureEpisodeID.Valid {
-				if err := queries.MoveEpisodeNotes(ctx, db.MoveEpisodeNotesParams{
-					TargetEpisodeID: episodeID, SourceEpisodeID: captureEpisodeID, UserID: userID,
-				}); err != nil {
-					return pgtype.UUID{}, fmt.Errorf("move capture notes: %w", err)
-				}
-				if err := queries.DeletePendingEpisode(ctx, db.DeletePendingEpisodeParams{
-					EpisodeID: captureEpisodeID, UserID: userID,
-				}); err != nil {
-					return pgtype.UUID{}, fmt.Errorf("delete merged pending episode: %w", err)
-				}
-			}
+		} else if _, err := queries.EnrichEpisode(ctx, db.EnrichEpisodeParams{
+			Title: strings.TrimSpace(resolved.EpisodeTitle), Description: strings.TrimSpace(resolved.Description),
+			PublishedAt: nullableTimestamptz(resolved.PublishedAt), DurationMs: max(resolved.DurationMS, 0),
+			CoverUrl: strings.TrimSpace(resolved.PodcastCoverURL), EpisodeID: episodeID, UserID: userID,
+		}); err != nil {
+			return pgtype.UUID{}, fmt.Errorf("enrich episode: %w", err)
 		}
 
 		for _, key := range identityKeys {
@@ -200,37 +149,13 @@ func (r *ImportRepository) SaveResolved(
 		}); err != nil {
 			return pgtype.UUID{}, fmt.Errorf("save episode source: %w", err)
 		}
-		if err := queries.SetImportEpisode(ctx, db.SetImportEpisodeParams{EpisodeID: episodeID, ImportID: importID, UserID: userID}); err != nil {
+		if err := queries.SetImportEpisode(ctx, db.SetImportEpisodeParams{
+			EpisodeID: episodeID, ImportID: importID, UserID: userID,
+		}); err != nil {
 			return pgtype.UUID{}, fmt.Errorf("complete import: %w", err)
-		}
-		if captureEpisodeID.Valid {
-			if err := markEpisodeAIStale(ctx, queries, userID, episodeID); err != nil {
-				return pgtype.UUID{}, err
-			}
-			if err := enqueueSearchBuild(ctx, queries, userID, episodeID); err != nil {
-				return pgtype.UUID{}, err
-			}
 		}
 		return episodeID, nil
 	})
-}
-
-func upsertResolvedPodcast(ctx context.Context, queries *db.Queries, userID pgtype.UUID, resolved *domain.ResolvedEpisode) (pgtype.UUID, error) {
-	title := strings.TrimSpace(resolved.PodcastTitle)
-	feedURL := strings.TrimSpace(resolved.FeedURL)
-	if title == "" || feedURL == "" {
-		return pgtype.UUID{}, nil
-	}
-	normalizedFeedURL := normalizeURL(feedURL)
-	podcast, err := queries.UpsertPodcast(ctx, db.UpsertPodcastParams{
-		UserID: userID, Title: title, Author: strings.TrimSpace(resolved.PodcastAuthor),
-		Description: strings.TrimSpace(resolved.PodcastDescription), CoverUrl: strings.TrimSpace(resolved.PodcastCoverURL),
-		FeedUrl: &normalizedFeedURL,
-	})
-	if err != nil {
-		return pgtype.UUID{}, fmt.Errorf("upsert podcast: %w", err)
-	}
-	return podcast.ID, nil
 }
 
 func episodeIdentityKeys(resolved *domain.ResolvedEpisode) []string {

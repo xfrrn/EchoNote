@@ -45,7 +45,6 @@ func TestTranscriptionWorkflowCompletesLongAudioWithSwappedSpeakers(t *testing.T
 		_, _ = pool.Exec(context.Background(), "DELETE FROM imports WHERE user_id = $1", userID)
 		_, _ = pool.Exec(context.Background(), "DELETE FROM jobs WHERE user_id = $1", userID)
 		_, _ = pool.Exec(context.Background(), "DELETE FROM episodes WHERE user_id = $1", userID)
-		_, _ = pool.Exec(context.Background(), "DELETE FROM podcasts WHERE user_id = $1", userID)
 	}()
 
 	imports := repository.NewImportRepository(pool)
@@ -62,8 +61,8 @@ func TestTranscriptionWorkflowCompletesLongAudioWithSwappedSpeakers(t *testing.T
 		t.Fatal(err)
 	}
 
-	transcriptions := repository.NewTranscriptionRepository(pool, "paraformer-v2", "fun-asr")
-	run, err := transcriptions.Create(ctx, userID, episodeID, "quality", repository.RunConfig{LanguageHint: "en", SpeakerCount: 2})
+	transcriptions := repository.NewTranscriptionRepository(pool, "fun-asr")
+	run, err := transcriptions.Create(ctx, userID, episodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,42 +126,12 @@ func TestTranscriptionWorkflowCompletesLongAudioWithSwappedSpeakers(t *testing.T
 	if firstMap["0"] != secondMap["9"] || firstMap["1"] != secondMap["7"] {
 		t.Fatalf("first=%v second=%v", firstMap, secondMap)
 	}
-	secondRun, err := transcriptions.Create(ctx, userID, episodeID, "economy", repository.RunConfig{LanguageHint: "en", SpeakerCount: 2})
+	sameRun, err := transcriptions.Create(ctx, userID, episodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	secondProcess := workerapp.New(
-		queue,
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
-		"transcription-test-worker-2",
-		time.Millisecond,
-		time.Second,
-		workflow.Handlers(),
-	)
-	secondWorkerContext, stopSecondWorker := context.WithCancel(ctx)
-	secondWorkerDone := make(chan error, 1)
-	go func() { secondWorkerDone <- secondProcess.Run(secondWorkerContext) }()
-	waitForRun(t, ctx, transcriptions, userID, secondRun.ID, "completed")
-	waitForRunCleanup(t, ctx, transcriptions, userID, secondRun.ID)
-	waitForStoreEmpty(t, ctx, store)
-	stopSecondWorker()
-	if err := <-secondWorkerDone; err != nil {
-		t.Fatal(err)
-	}
-	active, err = transcriptions.ActiveTranscript(ctx, userID, episodeID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	oldVersion, err := db.New(pool).GetTranscriptVersion(ctx, db.GetTranscriptVersionParams{TranscriptID: active.Version.ID, UserID: userID})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if active.Version.Version != 2 || !active.Version.IsActive || oldVersion.Version != 2 {
-		t.Fatalf("second active=%+v", active.Version)
-	}
-	firstVersion, err := db.New(pool).GetTranscriptVersion(ctx, db.GetTranscriptVersionParams{TranscriptID: segments[0].TranscriptVersionID, UserID: userID})
-	if err != nil || firstVersion.IsActive || firstVersion.Version != 1 {
-		t.Fatalf("first version=%+v err=%v", firstVersion, err)
+	if sameRun.ID != run.ID {
+		t.Fatalf("duplicate run=%v, want %v", sameRun.ID, run.ID)
 	}
 }
 
@@ -346,8 +315,6 @@ func (*fakeASR) FetchResult(_ context.Context, resultURL string) (transcriptiond
 	}
 	return transcriptiondomain.RawResult{Raw: []byte(`{"transcripts":[]}`), Segments: segments}, nil
 }
-
-func (*fakeASR) Cancel(context.Context, string) error { return nil }
 
 func digest(data []byte) string {
 	hash := sha256.Sum256(data)

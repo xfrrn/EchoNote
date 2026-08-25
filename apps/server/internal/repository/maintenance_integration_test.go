@@ -101,11 +101,11 @@ func TestRetentionPreviewsThenDeletesOnlyExpiredSystemRecords(t *testing.T) {
 		t.Fatalf("jobs=%d events=%d", jobs, events)
 	}
 	status, err := db.New(pool).GetImportStatus(ctx, db.GetImportStatusParams{ImportID: importID(t, ctx, pool, userID, "expired-import"), UserID: userID})
-	if err != nil || status.Status != "failed" || status.Stage != "expired" {
+	if err != nil || status.ImportStatus != "failed" || status.ImportStage != "expired" {
 		t.Fatalf("expired import status=%+v err=%v", status, err)
 	}
 	status, err = db.New(pool).GetImportStatus(ctx, db.GetImportStatusParams{ImportID: importID(t, ctx, pool, userID, "completed-import"), UserID: userID})
-	if err != nil || status.Status != "succeeded" || status.Stage != "completed" || status.EpisodeID != episodeID {
+	if err != nil || status.ImportStatus != "succeeded" || status.ImportStage != "completed" || status.EpisodeID != episodeID {
 		t.Fatalf("completed import status=%+v err=%v", status, err)
 	}
 }

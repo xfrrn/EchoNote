@@ -32,13 +32,12 @@ func TestImportCreatesAndDeduplicatesEpisode(t *testing.T) {
 		_, _ = pool.Exec(context.Background(), "DELETE FROM imports WHERE user_id = $1", userID)
 		_, _ = pool.Exec(context.Background(), "DELETE FROM jobs WHERE user_id = $1", userID)
 		_, _ = pool.Exec(context.Background(), "DELETE FROM episodes WHERE user_id = $1", userID)
-		_, _ = pool.Exec(context.Background(), "DELETE FROM podcasts WHERE user_id = $1", userID)
 	}()
 
 	repository := NewImportRepository(pool)
 	firstImport, err := repository.Create(ctx, userID, "https://podcasts.apple.com/show/id1?i=2")
-	if err != nil || firstImport.Status != "queued" {
-		t.Fatalf("first import status=%q err=%v", firstImport.Status, err)
+	if err != nil || firstImport.ImportStatus != "queued" {
+		t.Fatalf("first import status=%q err=%v", firstImport.ImportStatus, err)
 	}
 	secondImport, err := repository.Create(ctx, userID, "https://feeds.example.com/show.xml")
 	if err != nil {

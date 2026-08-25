@@ -18,15 +18,8 @@ func TestOpenApplicationInitializesEmptyDatabase(t *testing.T) {
 		t.Fatalf("migration version=%d dirty=%t err=%v", version, dirty, err)
 	}
 	if version > 0 {
-		if err := MigrateDown(databaseURL, int(version)); err != nil {
-			t.Fatal(err)
-		}
+		t.Skip("ECHONOTE_SCHEMA_TEST_DATABASE_URL must point to an empty database")
 	}
-	t.Cleanup(func() {
-		if err := MigrateUp(databaseURL); err != nil {
-			t.Errorf("restore schema: %v", err)
-		}
-	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -43,14 +36,14 @@ FROM pg_catalog.pg_tables
 WHERE schemaname = 'public'
   AND tablename = ANY($1::text[])
 `, []string{
-		"jobs", "job_events", "podcasts", "episodes", "episode_sources", "episode_identity_keys", "imports", "notes",
+		"jobs", "job_events", "episodes", "episode_sources", "episode_identity_keys", "imports",
 		"transcription_runs", "transcription_chunks", "transcription_events", "transcript_versions", "transcript_speakers", "transcript_segments",
-		"search_documents", "search_chunks", "ai_artifacts", "conversations", "messages", "message_citations", "users",
+		"users",
 	}).Scan(&tables); err != nil {
 		t.Fatal(err)
 	}
-	if tables != 21 {
-		t.Fatalf("initialized tables=%d, want 21", tables)
+	if tables != 13 {
+		t.Fatalf("initialized tables=%d, want 13", tables)
 	}
 }
 

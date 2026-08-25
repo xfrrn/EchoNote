@@ -88,7 +88,6 @@ func (q *Queries) AddEpisodeSource(ctx context.Context, arg AddEpisodeSourcePara
 const createEpisode = `-- name: CreateEpisode :one
 INSERT INTO episodes (
     user_id,
-    podcast_id,
     title,
     description,
     published_at,
@@ -97,20 +96,18 @@ INSERT INTO episodes (
     resolve_status
 ) VALUES (
     $1,
-    $2::uuid,
+    $2,
     $3,
-    $4,
-    $5::timestamptz,
+    $4::timestamptz,
+    $5,
     $6,
-    $7,
     'completed'
 )
-RETURNING id, user_id, podcast_id, title, description, published_at, duration_ms, cover_url, resolve_status, transcription_status, ai_status, created_at, updated_at
+RETURNING id, user_id, title, description, published_at, duration_ms, cover_url, resolve_status, transcription_status, created_at, updated_at
 `
 
 type CreateEpisodeParams struct {
 	UserID      pgtype.UUID        `json:"user_id"`
-	PodcastID   pgtype.UUID        `json:"podcast_id"`
 	Title       string             `json:"title"`
 	Description string             `json:"description"`
 	PublishedAt pgtype.Timestamptz `json:"published_at"`
@@ -121,7 +118,6 @@ type CreateEpisodeParams struct {
 func (q *Queries) CreateEpisode(ctx context.Context, arg CreateEpisodeParams) (Episode, error) {
 	row := q.db.QueryRow(ctx, createEpisode,
 		arg.UserID,
-		arg.PodcastID,
 		arg.Title,
 		arg.Description,
 		arg.PublishedAt,
@@ -132,7 +128,6 @@ func (q *Queries) CreateEpisode(ctx context.Context, arg CreateEpisodeParams) (E
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
-		&i.PodcastID,
 		&i.Title,
 		&i.Description,
 		&i.PublishedAt,
@@ -140,7 +135,6 @@ func (q *Queries) CreateEpisode(ctx context.Context, arg CreateEpisodeParams) (E
 		&i.CoverUrl,
 		&i.ResolveStatus,
 		&i.TranscriptionStatus,
-		&i.AiStatus,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -175,25 +169,19 @@ func (q *Queries) CreateImport(ctx context.Context, arg CreateImportParams) (Imp
 
 const enrichEpisode = `-- name: EnrichEpisode :one
 UPDATE episodes
-SET podcast_id = COALESCE(episodes.podcast_id, $1::uuid),
-    title = CASE
-        WHEN episodes.podcast_id IS NULL AND $1::uuid IS NOT NULL
-        THEN $2
-        ELSE episodes.title
-    END,
-    description = CASE WHEN episodes.description = '' THEN $3 ELSE episodes.description END,
-    published_at = COALESCE(episodes.published_at, $4::timestamptz),
-    duration_ms = CASE WHEN episodes.duration_ms = 0 THEN $5 ELSE episodes.duration_ms END,
-    cover_url = CASE WHEN episodes.cover_url = '' THEN $6 ELSE episodes.cover_url END,
+SET title = CASE WHEN episodes.title = '' THEN $1 ELSE episodes.title END,
+    description = CASE WHEN episodes.description = '' THEN $2 ELSE episodes.description END,
+    published_at = COALESCE(episodes.published_at, $3::timestamptz),
+    duration_ms = CASE WHEN episodes.duration_ms = 0 THEN $4 ELSE episodes.duration_ms END,
+    cover_url = CASE WHEN episodes.cover_url = '' THEN $5 ELSE episodes.cover_url END,
     resolve_status = 'completed',
     updated_at = now()
-WHERE episodes.id = $7
-  AND episodes.user_id = $8
-RETURNING id, user_id, podcast_id, title, description, published_at, duration_ms, cover_url, resolve_status, transcription_status, ai_status, created_at, updated_at
+WHERE episodes.id = $6
+  AND episodes.user_id = $7
+RETURNING id, user_id, title, description, published_at, duration_ms, cover_url, resolve_status, transcription_status, created_at, updated_at
 `
 
 type EnrichEpisodeParams struct {
-	PodcastID   pgtype.UUID        `json:"podcast_id"`
 	Title       string             `json:"title"`
 	Description string             `json:"description"`
 	PublishedAt pgtype.Timestamptz `json:"published_at"`
@@ -205,7 +193,6 @@ type EnrichEpisodeParams struct {
 
 func (q *Queries) EnrichEpisode(ctx context.Context, arg EnrichEpisodeParams) (Episode, error) {
 	row := q.db.QueryRow(ctx, enrichEpisode,
-		arg.PodcastID,
 		arg.Title,
 		arg.Description,
 		arg.PublishedAt,
@@ -218,7 +205,6 @@ func (q *Queries) EnrichEpisode(ctx context.Context, arg EnrichEpisodeParams) (E
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
-		&i.PodcastID,
 		&i.Title,
 		&i.Description,
 		&i.PublishedAt,
@@ -226,7 +212,6 @@ func (q *Queries) EnrichEpisode(ctx context.Context, arg EnrichEpisodeParams) (E
 		&i.CoverUrl,
 		&i.ResolveStatus,
 		&i.TranscriptionStatus,
-		&i.AiStatus,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -305,18 +290,42 @@ SELECT
     import_record.id,
     import_record.submitted_url,
     import_record.episode_id,
-    episode.resolve_status AS episode_resolve_status,
-    COALESCE(job.status, CASE WHEN episode.resolve_status = 'completed' THEN 'succeeded' ELSE 'failed' END)::text AS status,
-    COALESCE(job.stage, CASE WHEN episode.resolve_status = 'completed' THEN 'completed' ELSE 'expired' END)::text AS stage,
+    episode.title,
+    episode.duration_ms,
+    COALESCE(job.status, CASE WHEN episode.resolve_status = 'completed' THEN 'succeeded' ELSE 'failed' END)::text AS import_status,
+    COALESCE(job.stage, CASE WHEN episode.resolve_status = 'completed' THEN 'completed' ELSE 'expired' END)::text AS import_stage,
     job.error_code,
     job.error_message,
+    run.id AS transcription_run_id,
+    COALESCE(run.status, '')::text AS transcription_status,
+    COALESCE(run.stage, '')::text AS transcription_stage,
+    COALESCE(run.total_chunks, 0)::integer AS total_chunks,
+    COALESCE(run.completed_chunks, 0)::integer AS completed_chunks,
+    run.error_code AS transcription_error_code,
+    run.error_message AS transcription_error_message,
+    transcript.id AS transcript_id,
     import_record.created_at,
-    GREATEST(import_record.updated_at, COALESCE(job.updated_at, import_record.updated_at))::timestamptz AS updated_at
+    GREATEST(
+        import_record.updated_at,
+        COALESCE(job.updated_at, import_record.updated_at),
+        COALESCE(run.updated_at, import_record.updated_at)
+    )::timestamptz AS updated_at
 FROM imports AS import_record
 LEFT JOIN jobs AS job ON job.id = import_record.job_id
 LEFT JOIN episodes AS episode
   ON episode.id = import_record.episode_id
  AND episode.user_id = import_record.user_id
+LEFT JOIN LATERAL (
+    SELECT candidate.id, candidate.user_id, candidate.episode_id, candidate.profile, candidate.provider, candidate.model, candidate.status, candidate.stage, candidate.version, candidate.config, candidate.source_object_key, candidate.source_audio_hash, candidate.prepared_object_key, candidate.prepared_audio_hash, candidate.duration_ms, candidate.total_chunks, candidate.completed_chunks, candidate.started_at, candidate.completed_at, candidate.error_code, candidate.error_message, candidate.audio_cleaned_at, candidate.chunks_cleaned_at, candidate.created_at, candidate.updated_at
+    FROM transcription_runs AS candidate
+    WHERE candidate.episode_id = import_record.episode_id
+      AND candidate.user_id = import_record.user_id
+    ORDER BY candidate.created_at DESC, candidate.id DESC
+    LIMIT 1
+) AS run ON true
+LEFT JOIN transcript_versions AS transcript
+  ON transcript.transcription_run_id = run.id
+ AND transcript.user_id = import_record.user_id
 WHERE import_record.id = $1
   AND import_record.user_id = $2
 `
@@ -327,16 +336,25 @@ type GetImportStatusParams struct {
 }
 
 type GetImportStatusRow struct {
-	ID                   pgtype.UUID        `json:"id"`
-	SubmittedUrl         string             `json:"submitted_url"`
-	EpisodeID            pgtype.UUID        `json:"episode_id"`
-	EpisodeResolveStatus *string            `json:"episode_resolve_status"`
-	Status               string             `json:"status"`
-	Stage                string             `json:"stage"`
-	ErrorCode            *string            `json:"error_code"`
-	ErrorMessage         *string            `json:"error_message"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	ID                        pgtype.UUID        `json:"id"`
+	SubmittedUrl              string             `json:"submitted_url"`
+	EpisodeID                 pgtype.UUID        `json:"episode_id"`
+	Title                     *string            `json:"title"`
+	DurationMs                *int64             `json:"duration_ms"`
+	ImportStatus              string             `json:"import_status"`
+	ImportStage               string             `json:"import_stage"`
+	ErrorCode                 *string            `json:"error_code"`
+	ErrorMessage              *string            `json:"error_message"`
+	TranscriptionRunID        pgtype.UUID        `json:"transcription_run_id"`
+	TranscriptionStatus       string             `json:"transcription_status"`
+	TranscriptionStage        string             `json:"transcription_stage"`
+	TotalChunks               int32              `json:"total_chunks"`
+	CompletedChunks           int32              `json:"completed_chunks"`
+	TranscriptionErrorCode    *string            `json:"transcription_error_code"`
+	TranscriptionErrorMessage *string            `json:"transcription_error_message"`
+	TranscriptID              pgtype.UUID        `json:"transcript_id"`
+	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                 pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (q *Queries) GetImportStatus(ctx context.Context, arg GetImportStatusParams) (GetImportStatusRow, error) {
@@ -346,15 +364,70 @@ func (q *Queries) GetImportStatus(ctx context.Context, arg GetImportStatusParams
 		&i.ID,
 		&i.SubmittedUrl,
 		&i.EpisodeID,
-		&i.EpisodeResolveStatus,
-		&i.Status,
-		&i.Stage,
+		&i.Title,
+		&i.DurationMs,
+		&i.ImportStatus,
+		&i.ImportStage,
 		&i.ErrorCode,
 		&i.ErrorMessage,
+		&i.TranscriptionRunID,
+		&i.TranscriptionStatus,
+		&i.TranscriptionStage,
+		&i.TotalChunks,
+		&i.CompletedChunks,
+		&i.TranscriptionErrorCode,
+		&i.TranscriptionErrorMessage,
+		&i.TranscriptID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listTranscriptionTaskSegments = `-- name: ListTranscriptionTaskSegments :many
+SELECT
+    segment.start_ms,
+    segment.text,
+    speaker.display_name AS speaker_name
+FROM transcript_segments AS segment
+JOIN transcript_speakers AS speaker ON speaker.id = segment.speaker_id
+JOIN transcript_versions AS transcript ON transcript.id = segment.transcript_version_id
+JOIN imports AS import_record ON import_record.episode_id = transcript.episode_id
+WHERE import_record.id = $1
+  AND import_record.user_id = $2
+  AND transcript.is_active
+ORDER BY segment.sequence
+`
+
+type ListTranscriptionTaskSegmentsParams struct {
+	ImportID pgtype.UUID `json:"import_id"`
+	UserID   pgtype.UUID `json:"user_id"`
+}
+
+type ListTranscriptionTaskSegmentsRow struct {
+	StartMs     int64  `json:"start_ms"`
+	Text        string `json:"text"`
+	SpeakerName string `json:"speaker_name"`
+}
+
+func (q *Queries) ListTranscriptionTaskSegments(ctx context.Context, arg ListTranscriptionTaskSegmentsParams) ([]ListTranscriptionTaskSegmentsRow, error) {
+	rows, err := q.db.Query(ctx, listTranscriptionTaskSegments, arg.ImportID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTranscriptionTaskSegmentsRow{}
+	for rows.Next() {
+		var i ListTranscriptionTaskSegmentsRow
+		if err := rows.Scan(&i.StartMs, &i.Text, &i.SpeakerName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const setImportEpisode = `-- name: SetImportEpisode :exec
@@ -393,63 +466,4 @@ type SetImportJobParams struct {
 func (q *Queries) SetImportJob(ctx context.Context, arg SetImportJobParams) error {
 	_, err := q.db.Exec(ctx, setImportJob, arg.JobID, arg.ImportID, arg.UserID)
 	return err
-}
-
-const upsertPodcast = `-- name: UpsertPodcast :one
-INSERT INTO podcasts (
-    user_id,
-    title,
-    author,
-    description,
-    cover_url,
-    feed_url
-) VALUES (
-    $1,
-    $2,
-    $3,
-    $4,
-    $5,
-    $6
-)
-ON CONFLICT (user_id, feed_url) WHERE feed_url IS NOT NULL
-DO UPDATE SET
-    title = EXCLUDED.title,
-    author = CASE WHEN EXCLUDED.author <> '' THEN EXCLUDED.author ELSE podcasts.author END,
-    description = CASE WHEN EXCLUDED.description <> '' THEN EXCLUDED.description ELSE podcasts.description END,
-    cover_url = CASE WHEN EXCLUDED.cover_url <> '' THEN EXCLUDED.cover_url ELSE podcasts.cover_url END,
-    updated_at = now()
-RETURNING id, user_id, title, author, description, cover_url, feed_url, created_at, updated_at
-`
-
-type UpsertPodcastParams struct {
-	UserID      pgtype.UUID `json:"user_id"`
-	Title       string      `json:"title"`
-	Author      string      `json:"author"`
-	Description string      `json:"description"`
-	CoverUrl    string      `json:"cover_url"`
-	FeedUrl     *string     `json:"feed_url"`
-}
-
-func (q *Queries) UpsertPodcast(ctx context.Context, arg UpsertPodcastParams) (Podcast, error) {
-	row := q.db.QueryRow(ctx, upsertPodcast,
-		arg.UserID,
-		arg.Title,
-		arg.Author,
-		arg.Description,
-		arg.CoverUrl,
-		arg.FeedUrl,
-	)
-	var i Podcast
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.Title,
-		&i.Author,
-		&i.Description,
-		&i.CoverUrl,
-		&i.FeedUrl,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
 }
