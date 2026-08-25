@@ -1,0 +1,93 @@
+{
+  "realm": "echonote",
+  "enabled": true,
+  "sslRequired": "external",
+  "defaultSignatureAlgorithm": "RS256",
+  "accessTokenLifespan": 300,
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "bruteForceProtected": true,
+  "clientScopes": [
+    {
+      "name": "echonote:transcribe",
+      "description": "Submit and read EchoNote transcription tasks",
+      "protocol": "openid-connect",
+      "attributes": {
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "Transcribe audio links with EchoNote",
+        "include.in.token.scope": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "EchoNote MCP audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "${ECHONOTE_MCP_AUDIENCE}",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "defaultOptionalClientScopes": [
+    "offline_access",
+    "address",
+    "phone",
+    "microprofile-jwt",
+    "echonote:transcribe"
+  ],
+  "clientProfiles": {
+    "profiles": [
+      {
+        "name": "echonote-cimd",
+        "description": "Accept OpenAI-hosted OAuth Client ID Metadata Documents",
+        "executors": [
+          {
+            "executor": "client-id-metadata-document",
+            "configuration": {
+              "cimd-allow-http-scheme": false,
+              "cimd-allow-permitted-domains": [
+                "chatgpt.com",
+                "localhost",
+                "127.0.0.1"
+              ],
+              "cimd-restrict-same-domain": false,
+              "only-allow-confidential-client": false
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "clientPolicies": {
+    "policies": [
+      {
+        "name": "echonote-cimd",
+        "description": "Use CIMD only for OpenAI-hosted client identities",
+        "enabled": true,
+        "conditions": [
+          {
+            "condition": "client-id-uri",
+            "configuration": {
+              "client-id-uri-scheme": [
+                "https"
+              ],
+              "client-id-uri-allow-permitted-domains": [
+                "chatgpt.com"
+              ]
+            }
+          }
+        ],
+        "profiles": [
+          "echonote-cimd"
+        ]
+      }
+    ]
+  }
+}

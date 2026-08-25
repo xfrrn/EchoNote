@@ -9,6 +9,7 @@ export type ServiceConfig = {
   publicUrl: URL
   oauthIssuer: URL
   oauthAudience: string
+  allowInsecureOAuth: boolean
   apiUrl: URL
   internalToken: string
   host: string
@@ -25,13 +26,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServiceConfig 
   const oauthIssuer = requiredUrl(env, 'ECHONOTE_OAUTH_ISSUER')
   const apiUrl = new URL(env.ECHONOTE_API_URL?.trim() || 'http://127.0.0.1:8080')
   const internalToken = env.ECHONOTE_INTERNAL_TOKEN?.trim() || ''
+  const allowInsecureOAuth = ['development', 'test'].includes(env.APP_ENV?.trim() || 'development')
   const host = env.ECHONOTE_MCP_HOST?.trim() || '127.0.0.1'
   const port = Number(env.ECHONOTE_MCP_PORT?.trim() || '3001')
 
   if (!secureUrl(publicUrl)) throw new Error('ECHONOTE_PUBLIC_URL must use HTTPS (HTTP is allowed only on loopback)')
   if (publicUrl.search || publicUrl.hash) throw new Error('ECHONOTE_PUBLIC_URL must not contain query or fragment')
-  if (oauthIssuer.protocol !== 'https:' || oauthIssuer.search || oauthIssuer.hash) {
-    throw new Error('ECHONOTE_OAUTH_ISSUER must be an HTTPS issuer URL without query or fragment')
+  if (!secureUrl(oauthIssuer, allowInsecureOAuth) || oauthIssuer.search || oauthIssuer.hash) {
+    throw new Error('ECHONOTE_OAUTH_ISSUER must use HTTPS (development/test may use HTTP on loopback) without query or fragment')
   }
   if (!['127.0.0.1', '::1', 'localhost'].includes(apiUrl.hostname) || !['http:', 'https:'].includes(apiUrl.protocol)) {
     throw new Error('ECHONOTE_API_URL must use HTTP(S) on loopback')
@@ -47,6 +49,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServiceConfig 
     publicUrl,
     oauthIssuer,
     oauthAudience: env.ECHONOTE_OAUTH_AUDIENCE?.trim() || publicUrl.toString(),
+    allowInsecureOAuth,
     apiUrl,
     internalToken,
     host,
@@ -67,8 +70,8 @@ export async function discoverOAuth(config: ServiceConfig, fetcher: typeof fetch
       if (!metadata.code_challenge_methods_supported?.includes('S256')) throw new Error('authorization server must support PKCE S256')
       if (typeof raw.jwks_uri !== 'string') throw new Error('authorization server metadata is missing jwks_uri')
       const jwksUrl = new URL(raw.jwks_uri)
-      if (jwksUrl.protocol !== 'https:' || jwksUrl.username || jwksUrl.password) {
-        throw new Error('jwks_uri must use HTTPS without credentials')
+      if (!secureUrl(jwksUrl, config.allowInsecureOAuth) || jwksUrl.username || jwksUrl.password) {
+        throw new Error('jwks_uri must use HTTPS (development/test may use HTTP on loopback) without credentials')
       }
       return { metadata, jwksUrl }
     } catch (error) {
@@ -121,8 +124,8 @@ function requiredUrl(env: NodeJS.ProcessEnv, key: string): URL {
   return url
 }
 
-function secureUrl(url: URL): boolean {
-  return url.protocol === 'https:' || (url.protocol === 'http:' && ['127.0.0.1', '::1', 'localhost'].includes(url.hostname))
+function secureUrl(url: URL, allowLoopbackHttp = true): boolean {
+  return url.protocol === 'https:' || (allowLoopbackHttp && url.protocol === 'http:' && ['127.0.0.1', '::1', 'localhost'].includes(url.hostname))
 }
 
 function discoveryUrls(issuer: URL): URL[] {

@@ -7,6 +7,7 @@
   "description": "EchoNote MCP service",
   "scripts": {
     "build": "pnpm --filter @echonote/mcp build",
+    "dev": "pnpm build && node --env-file=.env scripts/dev.mjs",
     "test": "pnpm --filter @echonote/mcp test",
     "mcp": "pnpm --filter @echonote/mcp build && pnpm --filter @echonote/mcp start"
   }
