@@ -52,7 +52,6 @@ func run(args []string) error {
 	}
 	logger.Info("retention complete",
 		"scope", "system", "dry_run", !apply,
-		"sessions", report.Sessions,
 		"completed_jobs", report.CompletedJobs,
 		"failed_jobs", report.FailedJobs,
 		"job_events", report.JobEvents,

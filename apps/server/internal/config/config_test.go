@@ -2,9 +2,15 @@ package config
 
 import (
 	"log/slog"
+	"os"
 	"testing"
 	"time"
 )
+
+func TestMain(m *testing.M) {
+	_ = os.Setenv("ECHONOTE_OWNER_ID", "00000000-0000-4000-8000-000000000001")
+	os.Exit(m.Run())
+}
 
 func TestLoad(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/echonote?sslmode=disable")
@@ -16,9 +22,7 @@ func TestLoad(t *testing.T) {
 	t.Setenv("ASR_POLL_INTERVAL", "3s")
 	t.Setenv("ASR_STANDARD_MODEL", "")
 	t.Setenv("ASR_QUALITY_MODEL", "")
-	t.Setenv("SESSION_TTL", "24h")
-	t.Setenv("PASSWORD_BCRYPT_COST", "11")
-	t.Setenv("ECHONOTE_USER_ID", "fb48ddae-0ac8-4fb3-9e1a-f293ff938ed2")
+	t.Setenv("ECHONOTE_OWNER_ID", "fb48ddae-0ac8-4fb3-9e1a-f293ff938ed2")
 
 	cfg, err := Load()
 	if err != nil {
@@ -36,17 +40,14 @@ func TestLoad(t *testing.T) {
 	if cfg.ASRStandardModel != "paraformer-v2" || cfg.ASRQualityModel != "fun-asr" {
 		t.Fatalf("unexpected ASR models: standard=%q quality=%q", cfg.ASRStandardModel, cfg.ASRQualityModel)
 	}
-	if cfg.SessionTTL != 24*time.Hour || cfg.PasswordBcryptCost != 11 {
-		t.Fatalf("unexpected auth config: %+v", cfg)
-	}
 	if cfg.EmbeddingEndpoint != "https://dashscope.aliyuncs.com" {
 		t.Fatalf("unexpected embedding endpoint: %q", cfg.EmbeddingEndpoint)
 	}
 	if cfg.LLMEndpoint != "https://dashscope.aliyuncs.com/compatible-mode/v1" || cfg.LLMModel != "qwen-plus" {
 		t.Fatalf("unexpected LLM defaults: endpoint=%q model=%q", cfg.LLMEndpoint, cfg.LLMModel)
 	}
-	if !cfg.DevelopmentUserID.Valid {
-		t.Fatal("expected ECHONOTE_USER_ID to be parsed")
+	if !cfg.OwnerID.Valid {
+		t.Fatal("expected ECHONOTE_OWNER_ID to be parsed")
 	}
 }
 
@@ -107,44 +108,31 @@ func TestLoadRejectsInvalidASRModels(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsInvalidUserID(t *testing.T) {
+func TestLoadRejectsInvalidOwnerID(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://localhost/echonote")
-	t.Setenv("ECHONOTE_USER_ID", "not-a-uuid")
+	t.Setenv("ECHONOTE_OWNER_ID", "not-a-uuid")
 	if _, err := Load(); err == nil {
-		t.Fatal("expected invalid ECHONOTE_USER_ID to fail")
+		t.Fatal("expected invalid ECHONOTE_OWNER_ID to fail")
 	}
 }
 
-func TestLoadAllowsSessionAuthInDevelopment(t *testing.T) {
+func TestLoadRejectsMissingOwnerID(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://localhost/echonote")
-	t.Setenv("APP_ENV", "development")
-	t.Setenv("ECHONOTE_USER_ID", "")
+	t.Setenv("ECHONOTE_OWNER_ID", "")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected missing ECHONOTE_OWNER_ID to fail")
+	}
+}
+
+func TestValidateAPIRejectsNonLoopbackHost(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://localhost/echonote")
+	t.Setenv("SERVER_HOST", "0.0.0.0")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.DevelopmentUserID.Valid {
-		t.Fatal("expected development identity fallback to be opt-in")
-	}
-}
-
-func TestLoadRejectsProductionDevelopmentIdentity(t *testing.T) {
-	t.Setenv("DATABASE_URL", "postgres://localhost/echonote?sslmode=verify-full")
-	t.Setenv("APP_ENV", "production")
-	t.Setenv("PUBLIC_ORIGIN", "https://notes.example.com")
-	t.Setenv("ECHONOTE_USER_ID", "fb48ddae-0ac8-4fb3-9e1a-f293ff938ed2")
-	if _, err := Load(); err == nil {
-		t.Fatal("expected production ECHONOTE_USER_ID to fail")
-	}
-}
-
-func TestLoadRequiresSecureProductionOrigin(t *testing.T) {
-	t.Setenv("DATABASE_URL", "postgres://localhost/echonote?sslmode=verify-full")
-	t.Setenv("APP_ENV", "staging")
-	t.Setenv("ECHONOTE_USER_ID", "")
-	t.Setenv("PUBLIC_ORIGIN", "http://notes.example.com")
-	if _, err := Load(); err == nil {
-		t.Fatal("expected insecure staging PUBLIC_ORIGIN to fail")
+	if err := cfg.ValidateAPI(); err == nil {
+		t.Fatal("expected non-loopback internal API host to fail")
 	}
 }
 
@@ -266,11 +254,10 @@ func setSecureEnvironment(t *testing.T) {
 		t.Setenv(key, "")
 	}
 	t.Setenv("APP_ENV", "production")
-	t.Setenv("PUBLIC_ORIGIN", "https://notes.example.com")
 	t.Setenv("SERVER_HOST", "127.0.0.1")
 	t.Setenv("DATABASE_URL", "postgres://echonote_api@db.example.com/echonote?sslmode=verify-full&pool_max_conns=10")
 	t.Setenv("EXPECTED_DATABASE_NAME", "echonote")
 	t.Setenv("DATABASE_CONNECTION_BUDGET", "20")
 	t.Setenv("TRANSCRIPTION_ENABLED", "true")
-	t.Setenv("ECHONOTE_USER_ID", "")
+	t.Setenv("ECHONOTE_OWNER_ID", "00000000-0000-4000-8000-000000000001")
 }

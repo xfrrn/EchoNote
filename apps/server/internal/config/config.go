@@ -21,10 +21,7 @@ type Config struct {
 	DatabaseURL        string
 	ExpectedDatabase   string
 	DatabaseBudget     int
-	PublicOrigin       string
 	LogLevel           slog.Level
-	SessionTTL         time.Duration
-	PasswordBcryptCost int
 	WorkerPollInterval time.Duration
 	WorkerLeaseTimeout time.Duration
 	WorkerTempMaxAge   time.Duration
@@ -50,17 +47,15 @@ type Config struct {
 	FFmpegPath         string
 	FFprobePath        string
 	TranscriptionAPI   bool
-	DevelopmentUserID  pgtype.UUID
+	OwnerID            pgtype.UUID
 }
 
 func Load() (Config, error) {
 	cfg := Config{
 		Environment:        envOrDefault("APP_ENV", "development"),
-		ServerHost:         strings.TrimSpace(os.Getenv("SERVER_HOST")),
+		ServerHost:         envOrDefault("SERVER_HOST", "127.0.0.1"),
 		DatabaseURL:        strings.TrimSpace(os.Getenv("DATABASE_URL")),
 		ExpectedDatabase:   strings.TrimSpace(os.Getenv("EXPECTED_DATABASE_NAME")),
-		PublicOrigin:       strings.TrimSuffix(strings.TrimSpace(os.Getenv("PUBLIC_ORIGIN")), "/"),
-		SessionTTL:         30 * 24 * time.Hour,
 		WorkerPollInterval: time.Second,
 		WorkerLeaseTimeout: 5 * time.Minute,
 		WorkerTempMaxAge:   24 * time.Hour,
@@ -93,26 +88,12 @@ func Load() (Config, error) {
 	if cfg.DatabaseURL == "" {
 		return Config{}, fmt.Errorf("DATABASE_URL is required")
 	}
-	developmentUserID := strings.TrimSpace(os.Getenv("ECHONOTE_USER_ID"))
-	if cfg.Environment == "staging" || cfg.Environment == "production" {
-		if developmentUserID != "" {
-			return Config{}, fmt.Errorf("ECHONOTE_USER_ID is forbidden in staging and production")
-		}
-		if cfg.PublicOrigin == "" {
-			return Config{}, fmt.Errorf("PUBLIC_ORIGIN is required in staging and production")
-		}
-	} else if developmentUserID != "" {
-		if err := cfg.DevelopmentUserID.Scan(developmentUserID); err != nil {
-			return Config{}, fmt.Errorf("ECHONOTE_USER_ID must be a UUID")
-		}
+	ownerID := strings.TrimSpace(os.Getenv("ECHONOTE_OWNER_ID"))
+	if ownerID == "" {
+		return Config{}, fmt.Errorf("ECHONOTE_OWNER_ID is required")
 	}
-	if cfg.PublicOrigin != "" {
-		origin, parseErr := url.Parse(cfg.PublicOrigin)
-		secureEnvironment := cfg.Environment == "staging" || cfg.Environment == "production"
-		allowedScheme := origin.Scheme == "https" || (!secureEnvironment && origin.Scheme == "http")
-		if parseErr != nil || !allowedScheme || origin.Host == "" || origin.User != nil || origin.RawQuery != "" || origin.Fragment != "" || (origin.Path != "" && origin.Path != "/") {
-			return Config{}, fmt.Errorf("PUBLIC_ORIGIN must be an HTTPS origin without credentials or a path")
-		}
+	if err := cfg.OwnerID.Scan(ownerID); err != nil {
+		return Config{}, fmt.Errorf("ECHONOTE_OWNER_ID must be a UUID")
 	}
 	if cfg.SecureEnvironment() {
 		budget, err := strconv.Atoi(strings.TrimSpace(os.Getenv("DATABASE_CONNECTION_BUDGET")))
@@ -130,20 +111,11 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("SERVER_PORT must be an integer between 1 and 65535")
 	}
 	cfg.ServerPort = port
-	cost, err := strconv.Atoi(envOrDefault("PASSWORD_BCRYPT_COST", "12"))
-	if err != nil || cost < 10 || cost > 16 {
-		return Config{}, fmt.Errorf("PASSWORD_BCRYPT_COST must be an integer between 10 and 16")
-	}
-	cfg.PasswordBcryptCost = cost
-
 	if err := cfg.LogLevel.UnmarshalText([]byte(envOrDefault("LOG_LEVEL", "info"))); err != nil {
 		return Config{}, fmt.Errorf("LOG_LEVEL: %w", err)
 	}
 
 	if cfg.WorkerPollInterval, err = positiveDuration("WORKER_POLL_INTERVAL", cfg.WorkerPollInterval); err != nil {
-		return Config{}, err
-	}
-	if cfg.SessionTTL, err = positiveDuration("SESSION_TTL", cfg.SessionTTL); err != nil {
 		return Config{}, err
 	}
 	if cfg.WorkerLeaseTimeout, err = positiveDuration("WORKER_LEASE_TIMEOUT", cfg.WorkerLeaseTimeout); err != nil {
@@ -217,10 +189,6 @@ func (cfg Config) SecureEnvironment() bool {
 	return cfg.Environment == "staging" || cfg.Environment == "production"
 }
 
-func (cfg Config) SecureCookies() bool {
-	return cfg.SecureEnvironment()
-}
-
 func (cfg Config) ListenAddress() string {
 	if cfg.ServerHost == "" {
 		return ":" + strconv.Itoa(cfg.ServerPort)
@@ -229,12 +197,12 @@ func (cfg Config) ListenAddress() string {
 }
 
 func (cfg Config) ValidateAPI() error {
-	if !cfg.SecureEnvironment() {
-		return nil
-	}
 	host := net.ParseIP(cfg.ServerHost)
 	if host == nil || !host.IsLoopback() {
-		return fmt.Errorf("SERVER_HOST must be a loopback IP in staging and production")
+		return fmt.Errorf("SERVER_HOST must be a loopback IP")
+	}
+	if !cfg.SecureEnvironment() {
+		return nil
 	}
 	if !cfg.TranscriptionAPI {
 		return fmt.Errorf("TRANSCRIPTION_ENABLED must be true in staging and production")

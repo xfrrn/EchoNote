@@ -66,9 +66,8 @@ func TestNotesHTTPFlow(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		nil,
 		false,
-		developmentAuth(userID),
+		userID,
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 	)
 

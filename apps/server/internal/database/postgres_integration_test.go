@@ -45,12 +45,12 @@ WHERE schemaname = 'public'
 `, []string{
 		"jobs", "job_events", "podcasts", "episodes", "episode_sources", "episode_identity_keys", "imports", "notes",
 		"transcription_runs", "transcription_chunks", "transcription_events", "transcript_versions", "transcript_speakers", "transcript_segments",
-		"search_documents", "search_chunks", "ai_artifacts", "conversations", "messages", "message_citations", "users", "sessions",
+		"search_documents", "search_chunks", "ai_artifacts", "conversations", "messages", "message_citations", "users",
 	}).Scan(&tables); err != nil {
 		t.Fatal(err)
 	}
-	if tables != 22 {
-		t.Fatalf("initialized tables=%d, want 22", tables)
+	if tables != 21 {
+		t.Fatalf("initialized tables=%d, want 21", tables)
 	}
 }
 

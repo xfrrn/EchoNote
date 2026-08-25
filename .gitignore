@@ -1,18 +1,12 @@
 node_modules
 dist
-dev-dist
 *.tsbuildinfo
 .DS_Store
 *.local
-.playwright-mcp/
-.playwright-cli/
-
 # 环境与密钥
 .env
 .env.*
 !.env.example
-deployments/env/*
-!deployments/env/*.example
 *.key
 *.pem
 *.p12

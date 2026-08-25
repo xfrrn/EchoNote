@@ -2,40 +2,8 @@ BEGIN;
 
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    username TEXT,
-    username_normalized TEXT,
-    password_hash TEXT,
-    status TEXT NOT NULL DEFAULT 'placeholder'
-        CHECK (status IN ('placeholder', 'active', 'disabled')),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CHECK ((username IS NULL) = (username_normalized IS NULL)),
-    CHECK (username IS NULL OR btrim(username) <> ''),
-    CHECK (username_normalized IS NULL OR btrim(username_normalized) <> ''),
-    CHECK (password_hash IS NULL OR btrim(password_hash) <> ''),
-    CHECK (status <> 'active' OR (username IS NOT NULL AND password_hash IS NOT NULL)),
-    CHECK (status <> 'placeholder' OR (username IS NULL AND password_hash IS NULL))
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
-CREATE UNIQUE INDEX users_username_normalized_idx
-    ON users (username_normalized)
-    WHERE username_normalized IS NOT NULL;
-
-CREATE TABLE sessions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    token_hash BYTEA NOT NULL UNIQUE CHECK (octet_length(token_hash) = 32),
-    expires_at TIMESTAMPTZ NOT NULL,
-    revoked_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CHECK (expires_at > created_at),
-    CHECK (last_seen_at >= created_at)
-);
-
-CREATE INDEX sessions_user_active_idx
-    ON sessions (user_id, expires_at)
-    WHERE revoked_at IS NULL;
 
 INSERT INTO users (id)
 SELECT DISTINCT user_id

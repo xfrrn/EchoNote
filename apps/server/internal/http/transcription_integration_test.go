@@ -59,7 +59,7 @@ func TestTranscriptionHTTPFlow(t *testing.T) {
 	transcriptions := repository.NewTranscriptionRepository(pool, "paraformer-v2", "fun-asr")
 	router := NewRouter(
 		pool, imports, repository.NewLibraryRepository(pool), repository.NewNotesRepository(pool),
-		transcriptions, nil, nil, nil, nil, true, developmentAuth(userID), slog.New(slog.NewTextHandler(io.Discard, nil)),
+		transcriptions, nil, nil, nil, true, userID, slog.New(slog.NewTextHandler(io.Discard, nil)),
 	)
 
 	path := "/api/v1/episodes/" + formatUUID(episodeID) + "/transcriptions"
@@ -137,7 +137,7 @@ func TestTranscriptionHTTPFlow(t *testing.T) {
 	}
 	otherRouter := NewRouter(
 		pool, imports, repository.NewLibraryRepository(pool), repository.NewNotesRepository(pool),
-		transcriptions, nil, nil, nil, nil, true, developmentAuth(otherUserID), slog.New(slog.NewTextHandler(io.Discard, nil)),
+		transcriptions, nil, nil, nil, true, otherUserID, slog.New(slog.NewTextHandler(io.Discard, nil)),
 	)
 	for _, isolatedPath := range []string{
 		"/api/v1/transcriptions/" + run.Id,

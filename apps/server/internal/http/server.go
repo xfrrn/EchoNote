@@ -37,10 +37,7 @@ type Server struct {
 	searches             *service.SearchService
 	ai                   *service.AIService
 	exports              *service.ExportService
-	auth                 *repository.AuthRepository
 	transcriptionEnabled bool
-	authConfig           AuthConfig
-	dummyPasswordHash    string
 	logger               *slog.Logger
 }
 
@@ -55,23 +52,19 @@ func NewRouter(
 	searches *service.SearchService,
 	ai *service.AIService,
 	exports *service.ExportService,
-	authRepository *repository.AuthRepository,
 	transcriptionEnabled bool,
-	authConfig AuthConfig,
+	ownerID pgtype.UUID,
 	logger *slog.Logger,
 ) http.Handler {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
 	router.Use(recoverer(logger))
-	router.Use(apiNoStore)
-	router.Use(sameOrigin(authConfig.PublicOrigin))
-	router.Use(authenticate(authRepository, authConfig.DevelopmentUserID, logger))
+	router.Use(identify(ownerID))
 	router.Use(requestLogger(logger))
-	dummyPasswordHash, _ := authConfig.dummyPasswordHash()
 	return HandlerFromMux(&Server{
 		database: database, imports: imports, library: library, notes: notes,
 		transcriptions: transcriptions, searches: searches, ai: ai, exports: exports, transcriptionEnabled: transcriptionEnabled,
-		auth: authRepository, authConfig: authConfig, dummyPasswordHash: dummyPasswordHash, logger: logger,
+		logger: logger,
 	}, router)
 }
 

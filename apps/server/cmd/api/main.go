@@ -60,9 +60,8 @@ func run(args []string) error {
 			return err
 		}
 	}
-	authRepository := repository.NewAuthRepository(pool)
-	if err := authRepository.EnsurePlaceholderUser(ctx, cfg.DevelopmentUserID); err != nil {
-		return err
+	if _, err := pool.Exec(ctx, "INSERT INTO users (id) VALUES ($1) ON CONFLICT (id) DO NOTHING", cfg.OwnerID); err != nil {
+		return fmt.Errorf("ensure MCP owner: %w", err)
 	}
 	var embeddingProvider searchdomain.EmbeddingProvider
 	if cfg.EmbeddingEnabled() {
@@ -100,12 +99,8 @@ func run(args []string) error {
 			searchService,
 			aiService,
 			exportService,
-			authRepository,
 			cfg.TranscriptionAPI,
-			httpapi.AuthConfig{
-				PublicOrigin: cfg.PublicOrigin, SessionTTL: cfg.SessionTTL, PasswordCost: cfg.PasswordBcryptCost,
-				SecureCookies: cfg.SecureCookies(), DevelopmentUserID: cfg.DevelopmentUserID,
-			},
+			cfg.OwnerID,
 			logger,
 		),
 		ReadHeaderTimeout: 5 * time.Second,

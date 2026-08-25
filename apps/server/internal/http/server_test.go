@@ -19,11 +19,11 @@ func (f pingerFunc) Ping(ctx context.Context) error {
 	return f(ctx)
 }
 
-func developmentAuth(userID pgtype.UUID) AuthConfig {
+func testOwnerID(userID pgtype.UUID) pgtype.UUID {
 	if !userID.Valid {
 		userID = pgtype.UUID{Bytes: [16]byte{1}, Valid: true}
 	}
-	return AuthConfig{PasswordCost: 4, DevelopmentUserID: userID}
+	return userID
 }
 
 func TestHealthEndpoints(t *testing.T) {
@@ -42,7 +42,7 @@ func TestHealthEndpoints(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			router := NewRouter(pingerFunc(func(context.Context) error { return test.pingError }), nil, nil, nil, nil, nil, nil, nil, nil, false, developmentAuth(pgtype.UUID{}), logger)
+			router := NewRouter(pingerFunc(func(context.Context) error { return test.pingError }), nil, nil, nil, nil, nil, nil, nil, false, testOwnerID(pgtype.UUID{}), logger)
 			request := httptest.NewRequest(http.MethodGet, test.path, nil)
 			response := httptest.NewRecorder()
 			router.ServeHTTP(response, request)
@@ -65,7 +65,7 @@ func TestHealthEndpoints(t *testing.T) {
 
 func TestImportRejectsInvalidInputBeforeDatabase(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	router := NewRouter(pingerFunc(func(context.Context) error { return nil }), nil, nil, nil, nil, nil, nil, nil, nil, false, developmentAuth(pgtype.UUID{}), logger)
+	router := NewRouter(pingerFunc(func(context.Context) error { return nil }), nil, nil, nil, nil, nil, nil, nil, false, testOwnerID(pgtype.UUID{}), logger)
 	tests := []struct {
 		method string
 		path   string
@@ -88,7 +88,7 @@ func TestImportRejectsInvalidInputBeforeDatabase(t *testing.T) {
 
 func TestLibraryRejectsInvalidParametersBeforeDatabase(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	router := NewRouter(pingerFunc(func(context.Context) error { return nil }), nil, nil, nil, nil, nil, nil, nil, nil, false, developmentAuth(pgtype.UUID{}), logger)
+	router := NewRouter(pingerFunc(func(context.Context) error { return nil }), nil, nil, nil, nil, nil, nil, nil, false, testOwnerID(pgtype.UUID{}), logger)
 	tests := []struct {
 		method string
 		path   string
@@ -111,7 +111,7 @@ func TestLibraryRejectsInvalidParametersBeforeDatabase(t *testing.T) {
 
 func TestNotesRejectInvalidInputBeforeDatabase(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	router := NewRouter(pingerFunc(func(context.Context) error { return nil }), nil, nil, nil, nil, nil, nil, nil, nil, false, developmentAuth(pgtype.UUID{}), logger)
+	router := NewRouter(pingerFunc(func(context.Context) error { return nil }), nil, nil, nil, nil, nil, nil, nil, false, testOwnerID(pgtype.UUID{}), logger)
 	const (
 		id        = "11111111-1111-4111-8111-111111111111"
 		otherID   = "22222222-2222-4222-8222-222222222222"
@@ -146,7 +146,7 @@ func TestNotesRejectInvalidInputBeforeDatabase(t *testing.T) {
 
 func TestTranscriptionRejectsInvalidInputBeforeDatabase(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	router := NewRouter(pingerFunc(func(context.Context) error { return nil }), nil, nil, nil, nil, nil, nil, nil, nil, false, developmentAuth(pgtype.UUID{}), logger)
+	router := NewRouter(pingerFunc(func(context.Context) error { return nil }), nil, nil, nil, nil, nil, nil, nil, false, testOwnerID(pgtype.UUID{}), logger)
 	const (
 		id      = "11111111-1111-4111-8111-111111111111"
 		otherID = "22222222-2222-4222-8222-222222222222"
@@ -182,7 +182,7 @@ func TestTranscriptionRejectsInvalidInputBeforeDatabase(t *testing.T) {
 
 func TestSearchRejectsInvalidInputBeforeDatabase(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	router := NewRouter(pingerFunc(func(context.Context) error { return nil }), nil, nil, nil, nil, nil, nil, nil, nil, false, developmentAuth(pgtype.UUID{}), logger)
+	router := NewRouter(pingerFunc(func(context.Context) error { return nil }), nil, nil, nil, nil, nil, nil, nil, false, testOwnerID(pgtype.UUID{}), logger)
 	const id = "11111111-1111-4111-8111-111111111111"
 	tests := []struct {
 		method, path, body string

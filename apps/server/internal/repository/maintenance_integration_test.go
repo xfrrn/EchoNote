@@ -1,7 +1,6 @@
 package repository
 
 import (
-	"bytes"
 	"context"
 	"os"
 	"testing"
@@ -34,27 +33,9 @@ func TestRetentionPreviewsThenDeletesOnlyExpiredSystemRecords(t *testing.T) {
 		_, _ = pool.Exec(context.Background(), "DELETE FROM imports WHERE user_id = $1", userID)
 		_, _ = pool.Exec(context.Background(), "DELETE FROM jobs WHERE user_id = $1", userID)
 		_, _ = pool.Exec(context.Background(), "DELETE FROM episodes WHERE user_id = $1", userID)
-		_, _ = pool.Exec(context.Background(), "DELETE FROM sessions WHERE user_id = $1", userID)
 	}()
 
 	now := time.Now().UTC().Truncate(time.Microsecond)
-	for index, session := range []struct {
-		created, expires time.Time
-		revoked          *time.Time
-	}{
-		{created: now.Add(-100 * 24 * time.Hour), expires: now.Add(-31 * 24 * time.Hour)},
-		{created: now.Add(-60 * 24 * time.Hour), expires: now.Add(24 * time.Hour), revoked: timePointer(now.Add(-31 * 24 * time.Hour))},
-		{created: now.Add(-60 * 24 * time.Hour), expires: now.Add(-29 * 24 * time.Hour)},
-	} {
-		if _, err := pool.Exec(ctx, `INSERT INTO sessions
-            (user_id, token_hash, expires_at, revoked_at, created_at, last_seen_at)
-            VALUES ($1, $2, $3, $4, $5, $5)`,
-			userID, bytes.Repeat([]byte{byte(index + 1)}, 32), session.expires, session.revoked, session.created,
-		); err != nil {
-			t.Fatal(err)
-		}
-	}
-
 	completedOld := insertRetentionJob(t, ctx, pool, userID, "succeeded", now.Add(-31*24*time.Hour))
 	failedOld := insertRetentionJob(t, ctx, pool, userID, "failed", now.Add(-91*24*time.Hour))
 	completedRecent := insertRetentionJob(t, ctx, pool, userID, "canceled", now.Add(-29*24*time.Hour))
@@ -93,7 +74,7 @@ func TestRetentionPreviewsThenDeletesOnlyExpiredSystemRecords(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if preview != (RetentionReport{Sessions: 2, CompletedJobs: 1, FailedJobs: 1, JobEvents: 2}) {
+	if preview != (RetentionReport{CompletedJobs: 1, FailedJobs: 1, JobEvents: 2}) {
 		t.Fatalf("preview=%+v", preview)
 	}
 	var jobsBefore int
@@ -108,10 +89,7 @@ func TestRetentionPreviewsThenDeletesOnlyExpiredSystemRecords(t *testing.T) {
 	if applied != preview {
 		t.Fatalf("applied=%+v preview=%+v", applied, preview)
 	}
-	var sessions, jobs, events int
-	if err := pool.QueryRow(ctx, "SELECT count(*) FROM sessions WHERE user_id = $1", userID).Scan(&sessions); err != nil {
-		t.Fatal(err)
-	}
+	var jobs, events int
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM jobs WHERE user_id = $1", userID).Scan(&jobs); err != nil {
 		t.Fatal(err)
 	}
@@ -119,8 +97,8 @@ func TestRetentionPreviewsThenDeletesOnlyExpiredSystemRecords(t *testing.T) {
         JOIN jobs AS job ON job.id = event.job_id WHERE job.user_id = $1`, userID).Scan(&events); err != nil {
 		t.Fatal(err)
 	}
-	if sessions != 1 || jobs != 3 || events != 1 {
-		t.Fatalf("sessions=%d jobs=%d events=%d", sessions, jobs, events)
+	if jobs != 3 || events != 1 {
+		t.Fatalf("jobs=%d events=%d", jobs, events)
 	}
 	status, err := db.New(pool).GetImportStatus(ctx, db.GetImportStatusParams{ImportID: importID(t, ctx, pool, userID, "expired-import"), UserID: userID})
 	if err != nil || status.Status != "failed" || status.Stage != "expired" {
@@ -152,5 +130,3 @@ func importID(t *testing.T, ctx context.Context, pool *pgxpool.Pool, userID pgty
 	}
 	return id
 }
-
-func timePointer(value time.Time) *time.Time { return &value }

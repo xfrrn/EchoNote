@@ -88,7 +88,7 @@ func TestEpisodeExportHTTP(t *testing.T) {
 
 	exportService := service.NewExportService(repository.NewExportRepository(pool))
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	router := NewRouter(pool, nil, nil, nil, nil, nil, nil, exportService, nil, false, developmentAuth(userID), logger)
+	router := NewRouter(pool, nil, nil, nil, nil, nil, nil, exportService, false, userID, logger)
 	path := "/api/v1/episodes/" + formatUUID(episodeID) + "/exports"
 	body := `{"mode":"organized_note","include_user_notes":true,"include_summary":true,"include_key_points":true,"include_worth_reviewing":true,"include_transcript":true,"transcript_segment_ids":["` + formatUUID(segmentID) + `"]}`
 	response := serveAIRequest(router, http.MethodPost, path, body)
@@ -130,7 +130,7 @@ func TestEpisodeExportHTTP(t *testing.T) {
 		t.Fatalf("empty organized export status=%d body=%s", response.Code, response.Body.String())
 	}
 
-	otherRouter := NewRouter(pool, nil, nil, nil, nil, nil, nil, exportService, nil, false, developmentAuth(otherUserID), logger)
+	otherRouter := NewRouter(pool, nil, nil, nil, nil, nil, nil, exportService, false, otherUserID, logger)
 	response = serveAIRequest(otherRouter, http.MethodPost, path, `{"mode":"notes_only"}`)
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("export isolation status=%d body=%s", response.Code, response.Body.String())

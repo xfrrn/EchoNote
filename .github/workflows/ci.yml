@@ -29,6 +29,7 @@ jobs:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/echonote_test?sslmode=disable&pool_max_conns=5
       ECHONOTE_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/echonote_test?sslmode=disable&pool_max_conns=5
       ECHONOTE_MIGRATION_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/echonote_test?sslmode=disable&pool_max_conns=5
+      ECHONOTE_OWNER_ID: 00000000-0000-4000-8000-000000000001
 
     steps:
       - uses: actions/checkout@v4
@@ -45,13 +46,6 @@ jobs:
         working-directory: apps/server
       - run: go generate ./...
         working-directory: apps/server
-      - run: pnpm generate:contracts
-      - name: Reject production mock imports
-        run: |
-          if git grep -n "shared/mock" -- apps/web/src | grep -v '^apps/web/src/features/design/'; then
-            echo "production Web code must not import shared/mock" >&2
-            exit 1
-          fi
       - run: git diff --check
       - run: git diff --exit-code
       # Integration packages share one disposable database, so keep package tests serial.
@@ -65,8 +59,4 @@ jobs:
           for command in api worker migrate admin maintenance; do
             CGO_ENABLED=0 go -C apps/server build -trimpath -o "../../release/bin/echonote-$command" "./cmd/$command"
           done
-      - run: pnpm build
-      - name: Install Chrome for browser smoke
-        run: npx --yes --package @playwright/cli@0.1.18 playwright-cli install-browser chrome --with-deps
-      - name: Browser smoke
-        run: bash deployments/scripts/browser-ci-smoke.sh
+      - run: pnpm test

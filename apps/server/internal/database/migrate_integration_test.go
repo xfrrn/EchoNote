@@ -7,13 +7,12 @@ import (
 	"testing"
 	"time"
 
-	authn "github.com/Actify/echonote/apps/server/internal/auth"
 	"github.com/Actify/echonote/apps/server/internal/database"
 	"github.com/Actify/echonote/apps/server/internal/repository"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func TestIdentityMigrationBackfillsAndClaimsExistingUser(t *testing.T) {
+func TestMCPIdentityMigrationBackfillsExistingOwner(t *testing.T) {
 	databaseURL := os.Getenv("ECHONOTE_MIGRATION_TEST_DATABASE_URL")
 	if databaseURL == "" {
 		t.Skip("set ECHONOTE_MIGRATION_TEST_DATABASE_URL to run the migration backfill test")
@@ -22,7 +21,7 @@ func TestIdentityMigrationBackfillsAndClaimsExistingUser(t *testing.T) {
 		t.Fatal(err)
 	}
 	version, dirty, err := database.MigrationVersion(databaseURL)
-	if err != nil || dirty || version < 7 {
+	if err != nil || dirty || version < 9 {
 		t.Fatalf("migration version=%d dirty=%t err=%v", version, dirty, err)
 	}
 	if err := database.MigrateDown(databaseURL, int(version-6)); err != nil {
@@ -54,16 +53,9 @@ func TestIdentityMigrationBackfillsAndClaimsExistingUser(t *testing.T) {
 	if err := database.MigrateUp(databaseURL); err != nil {
 		t.Fatal(err)
 	}
-	var status string
-	if err := pool.QueryRow(ctx, "SELECT status FROM users WHERE id = $1", userID).Scan(&status); err != nil || status != "placeholder" {
-		t.Fatalf("backfilled user status=%q err=%v", status, err)
-	}
-	passwordHash, err := authn.HashPassword("migration test password", 4)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := repository.NewAuthRepository(pool).ClaimUser(ctx, userID, "migrated_user", "migrated_user", passwordHash); err != nil {
-		t.Fatal(err)
+	var ownerID pgtype.UUID
+	if err := pool.QueryRow(ctx, "SELECT id FROM users WHERE id = $1", userID).Scan(&ownerID); err != nil || ownerID != userID {
+		t.Fatalf("backfilled owner=%v err=%v", ownerID, err)
 	}
 	episodes, total, err := repository.NewLibraryRepository(pool).List(ctx, userID, 10, 0)
 	if err != nil || total != 1 || len(episodes) != 1 || episodes[0].ID != episodeID {

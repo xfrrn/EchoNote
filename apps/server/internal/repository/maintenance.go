@@ -16,7 +16,6 @@ const (
 )
 
 type RetentionReport struct {
-	Sessions      int64 `json:"sessions"`
 	CompletedJobs int64 `json:"completed_jobs"`
 	FailedJobs    int64 `json:"failed_jobs"`
 	JobEvents     int64 `json:"job_events"`
@@ -45,17 +44,15 @@ func (repository *MaintenanceRepository) Retain(ctx context.Context, now time.Ti
 
 	if err := tx.QueryRow(ctx, `
 SELECT
-    (SELECT count(*) FROM sessions
-     WHERE expires_at < $1 OR (revoked_at IS NOT NULL AND revoked_at < $1)),
     (SELECT count(*) FROM jobs
      WHERE status IN ('succeeded', 'canceled') AND completed_at < $1),
     (SELECT count(*) FROM jobs
      WHERE status = 'failed' AND completed_at < $2),
     (SELECT count(*) FROM job_events AS event
      JOIN jobs AS job ON job.id = event.job_id
-     WHERE (job.status IN ('succeeded', 'canceled') AND job.completed_at < $1)
-        OR (job.status = 'failed' AND job.completed_at < $2))`, completedBefore, failedBefore).Scan(
-		&report.Sessions, &report.CompletedJobs, &report.FailedJobs, &report.JobEvents,
+	     WHERE (job.status IN ('succeeded', 'canceled') AND job.completed_at < $1)
+	        OR (job.status = 'failed' AND job.completed_at < $2))`, completedBefore, failedBefore).Scan(
+		&report.CompletedJobs, &report.FailedJobs, &report.JobEvents,
 	); err != nil {
 		return report, fmt.Errorf("preview retention: %w", err)
 	}
@@ -63,11 +60,6 @@ SELECT
 		return report, tx.Commit(ctx)
 	}
 
-	sessions, err := tx.Exec(ctx, `DELETE FROM sessions
-WHERE expires_at < $1 OR (revoked_at IS NOT NULL AND revoked_at < $1)`, completedBefore)
-	if err != nil {
-		return report, fmt.Errorf("delete expired sessions: %w", err)
-	}
 	completed, err := tx.Exec(ctx, `DELETE FROM jobs
 WHERE status IN ('succeeded', 'canceled') AND completed_at < $1`, completedBefore)
 	if err != nil {
@@ -78,7 +70,6 @@ WHERE status = 'failed' AND completed_at < $1`, failedBefore)
 	if err != nil {
 		return report, fmt.Errorf("delete failed jobs: %w", err)
 	}
-	report.Sessions = sessions.RowsAffected()
 	report.CompletedJobs = completed.RowsAffected()
 	report.FailedJobs = failed.RowsAffected()
 	if err := tx.Commit(ctx); err != nil {

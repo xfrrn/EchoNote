@@ -1,8 +1,5 @@
 export type EchoNoteClientConfig = {
   baseUrl: string
-  origin?: string
-  username?: string
-  password?: string
 }
 
 type RequestOptions = {
@@ -24,48 +21,32 @@ export class EchoNoteApiError extends Error {
 
 export class EchoNoteClient {
   private readonly baseUrl: URL
-  private readonly origin: string
-  private readonly username?: string
-  private readonly password?: string
-  private sessionCookie?: string
-  private loginPromise?: Promise<void>
 
   constructor(config: EchoNoteClientConfig, private readonly fetcher: typeof fetch = fetch) {
     this.baseUrl = new URL(config.baseUrl)
-    this.origin = config.origin ?? this.baseUrl.origin
-    this.username = config.username
-    this.password = config.password
-    if (!!this.username !== !!this.password) {
-      throw new Error('ECHONOTE_USERNAME and ECHONOTE_PASSWORD must be set together')
-    }
   }
 
   static fromEnv(): EchoNoteClient {
     return new EchoNoteClient({
       baseUrl: process.env.ECHONOTE_API_URL ?? 'http://127.0.0.1:8080',
-      origin: process.env.ECHONOTE_API_ORIGIN,
-      username: process.env.ECHONOTE_USERNAME,
-      password: process.env.ECHONOTE_PASSWORD,
     })
   }
 
   json(path: string, options: RequestOptions = {}): Promise<unknown> {
-    return this.request(path, options, true).then(async response => {
+    return this.request(path, options).then(async response => {
       if (response.status === 204) return { ok: true }
       return response.json()
     })
   }
 
   text(path: string, options: RequestOptions = {}): Promise<string> {
-    return this.request(path, options, true).then(response => response.text())
+    return this.request(path, options).then(response => response.text())
   }
 
-  private async request(path: string, options: RequestOptions, retryAuth: boolean): Promise<Response> {
+  private async request(path: string, options: RequestOptions): Promise<Response> {
     const method = options.method ?? 'GET'
     const headers = new Headers({ Accept: options.accept ?? 'application/json' })
     if (options.body !== undefined) headers.set('Content-Type', 'application/json')
-    if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) headers.set('Origin', this.origin)
-    if (this.sessionCookie) headers.set('Cookie', this.sessionCookie)
 
     let response: Response
     try {
@@ -78,37 +59,8 @@ export class EchoNoteClient {
       throw new Error(`Cannot reach EchoNote API at ${this.baseUrl.origin}: ${error instanceof Error ? error.message : error}`)
     }
 
-    if (response.status === 401 && retryAuth && this.username && this.password) {
-      await this.ensureLogin()
-      return this.request(path, options, false)
-    }
     if (!response.ok) throw await apiError(response)
     return response
-  }
-
-  private ensureLogin(): Promise<void> {
-    if (!this.loginPromise) {
-      this.loginPromise = this.login().finally(() => {
-        this.loginPromise = undefined
-      })
-    }
-    return this.loginPromise
-  }
-
-  private async login(): Promise<void> {
-    const response = await this.fetcher(new URL('/api/v1/auth/login', this.baseUrl), {
-      method: 'POST',
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json', Origin: this.origin },
-      body: JSON.stringify({ username: this.username, password: this.password }),
-    })
-    if (!response.ok) throw await apiError(response)
-
-    const cookie = response.headers.get('set-cookie')?.split(';', 1)[0]
-    if (!cookie?.startsWith('echonote_session=')) {
-      throw new Error('EchoNote login response did not set echonote_session')
-    }
-    this.sessionCookie = cookie
-    await response.arrayBuffer()
   }
 }
 

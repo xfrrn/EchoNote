@@ -13,7 +13,7 @@ ALTER TABLE episodes DROP CONSTRAINT episodes_user_id_fkey;
 ALTER TABLE podcasts DROP CONSTRAINT podcasts_user_id_fkey;
 ALTER TABLE jobs DROP CONSTRAINT jobs_user_id_fkey;
 
-DROP TABLE sessions;
+DROP TABLE IF EXISTS sessions;
 DROP TABLE users;
 
 COMMIT;

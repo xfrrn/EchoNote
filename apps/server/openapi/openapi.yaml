@@ -1,10 +1,8 @@
 openapi: 3.0.3
 info:
-  title: EchoNote API
-  version: 0.9.0
-  description: EchoNote modular-monolith HTTP API.
-security:
-  - SessionCookie: []
+  title: EchoNote Internal API
+  version: 1.0.0
+  description: Loopback-only implementation API for the EchoNote MCP service.
 paths:
   /healthz:
     get:
@@ -45,73 +43,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReadinessResponse"
-  /api/v1/auth/login:
-    post:
-      operationId: login
-      summary: Create a server-side session
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LoginRequest"
-      responses:
-        "200":
-          description: Login succeeded and a Session Cookie was set.
-          headers:
-            X-Request-ID:
-              $ref: "#/components/headers/RequestID"
-            Set-Cookie:
-              schema:
-                type: string
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LoginResponse"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "500":
-          $ref: "#/components/responses/InternalError"
-  /api/v1/auth/logout:
-    post:
-      operationId: logout
-      summary: Revoke the current session
-      responses:
-        "204":
-          description: Session revoked and Cookie cleared.
-          headers:
-            X-Request-ID:
-              $ref: "#/components/headers/RequestID"
-            Set-Cookie:
-              schema:
-                type: string
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "500":
-          $ref: "#/components/responses/InternalError"
-  /api/v1/me:
-    get:
-      operationId: getCurrentUser
-      summary: Get the authenticated user
-      responses:
-        "200":
-          description: Current user and Session expiry.
-          headers:
-            X-Request-ID:
-              $ref: "#/components/headers/RequestID"
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LoginResponse"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
   /api/v1/imports:
     post:
       operationId: createImport
@@ -925,11 +856,6 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 components:
-  securitySchemes:
-    SessionCookie:
-      type: apiKey
-      in: cookie
-      name: echonote_session
   headers:
     RequestID:
       description: Request correlation identifier.
@@ -938,24 +864,6 @@ components:
   responses:
     BadRequest:
       description: Invalid request.
-      headers:
-        X-Request-ID:
-          $ref: "#/components/headers/RequestID"
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/ErrorResponse"
-    Unauthorized:
-      description: A valid Session is required.
-      headers:
-        X-Request-ID:
-          $ref: "#/components/headers/RequestID"
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/ErrorResponse"
-    Forbidden:
-      description: The request Origin is not allowed.
       headers:
         X-Request-ID:
           $ref: "#/components/headers/RequestID"
@@ -1009,44 +917,6 @@ components:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
   schemas:
-    LoginRequest:
-      type: object
-      additionalProperties: false
-      required:
-        - username
-        - password
-      properties:
-        username:
-          type: string
-          minLength: 3
-          maxLength: 64
-        password:
-          type: string
-          minLength: 12
-          maxLength: 72
-    LoginResponse:
-      type: object
-      additionalProperties: false
-      required:
-        - user
-        - expires_at
-      properties:
-        user:
-          $ref: "#/components/schemas/UserResponse"
-        expires_at:
-          type: string
-          format: date-time
-    UserResponse:
-      type: object
-      additionalProperties: false
-      required:
-        - id
-        - username
-      properties:
-        id:
-          type: string
-        username:
-          type: string
     CreateImportRequest:
       type: object
       additionalProperties: false

@@ -196,16 +196,6 @@ type SearchDocument struct {
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
-type Session struct {
-	ID         pgtype.UUID        `json:"id"`
-	UserID     pgtype.UUID        `json:"user_id"`
-	TokenHash  []byte             `json:"token_hash"`
-	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
-	RevokedAt  pgtype.Timestamptz `json:"revoked_at"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-	LastSeenAt pgtype.Timestamptz `json:"last_seen_at"`
-}
-
 type TranscriptSegment struct {
 	ID                  pgtype.UUID        `json:"id"`
 	TranscriptVersionID pgtype.UUID        `json:"transcript_version_id"`
@@ -303,11 +293,6 @@ type TranscriptionRun struct {
 }
 
 type User struct {
-	ID                 pgtype.UUID        `json:"id"`
-	Username           *string            `json:"username"`
-	UsernameNormalized *string            `json:"username_normalized"`
-	PasswordHash       *string            `json:"password_hash"`
-	Status             string             `json:"status"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	ID        pgtype.UUID        `json:"id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
