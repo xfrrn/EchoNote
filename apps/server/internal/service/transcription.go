@@ -24,7 +24,7 @@ import (
 const signedURLTTL = 4 * time.Hour
 
 type AudioDownloader interface {
-	Download(context.Context, string, string) (string, error)
+	Download(context.Context, string, map[string]string, string) (string, error)
 }
 
 type AudioProcessor interface {
@@ -107,7 +107,11 @@ func (workflow *TranscriptionWorkflow) download(ctx context.Context, job db.Job)
 		return err
 	}
 	defer cleanup()
-	hash, err := workflow.downloader.Download(ctx, run.AudioUrl, filePath)
+	var headers map[string]string
+	if err := json.Unmarshal(run.DownloadHeaders, &headers); err != nil {
+		return permanent("AUDIO_DOWNLOAD_HEADERS_INVALID", "audio download headers are invalid", err)
+	}
+	hash, err := workflow.downloader.Download(ctx, run.AudioUrl, headers, filePath)
 	if err != nil {
 		return err
 	}

@@ -40,7 +40,7 @@ func NewDownloader() *Downloader {
 	return &Downloader{client: safehttp.NewClient(30 * time.Minute)}
 }
 
-func (downloader *Downloader) Download(ctx context.Context, rawURL, destination string) (string, error) {
+func (downloader *Downloader) Download(ctx context.Context, rawURL string, headers map[string]string, destination string) (string, error) {
 	parsed, err := safehttp.ParsePublicURL(rawURL)
 	if err != nil {
 		return "", &ProviderError{code: "AUDIO_URL_INVALID", message: err.Error()}
@@ -49,7 +49,14 @@ func (downloader *Downloader) Download(ctx context.Context, rawURL, destination 
 	if err != nil {
 		return "", err
 	}
-	request.Header.Set("User-Agent", "EchoNote/0.5")
+	hasUserAgent := false
+	for name, value := range headers {
+		request.Header.Set(name, value)
+		hasUserAgent = hasUserAgent || strings.EqualFold(name, "User-Agent")
+	}
+	if !hasUserAgent {
+		request.Header.Set("User-Agent", "EchoNote/0.5")
+	}
 	response, err := downloader.client.Do(request)
 	if err != nil {
 		return "", &ProviderError{code: "AUDIO_DOWNLOAD_FAILED", message: err.Error(), retryable: true}

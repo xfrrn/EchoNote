@@ -18,7 +18,10 @@ func (function roundTripFunc) RoundTrip(request *http.Request) (*http.Response, 
 }
 
 func TestDownloaderLimitsContentTypeAndHashes(t *testing.T) {
-	downloader := &Downloader{client: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+	downloader := &Downloader{client: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if request.Header.Get("Referer") != "https://social.example.com/" || request.Header["User-Agent"][0] != "" {
+			t.Fatalf("unexpected download headers: %v", request.Header)
+		}
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Header:     http.Header{"Content-Type": []string{"audio/mpeg"}},
@@ -26,7 +29,9 @@ func TestDownloaderLimitsContentTypeAndHashes(t *testing.T) {
 		}, nil
 	})}}
 	destination := filepath.Join(t.TempDir(), "audio.bin")
-	hash, err := downloader.Download(context.Background(), "https://cdn.example.com/audio.mp3", destination)
+	hash, err := downloader.Download(context.Background(), "https://cdn.example.com/audio.mp3", map[string]string{
+		"Referer": "https://social.example.com/", "User-Agent": "",
+	}, destination)
 	if err != nil || hash != "6ed8919ce20490a5e3ad8630a4fab69475297abd07db73918dd5f36fcfaeb11b" {
 		t.Fatalf("hash=%q err=%v", hash, err)
 	}

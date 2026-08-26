@@ -12,6 +12,7 @@ func TestLoadAndValidateAPI(t *testing.T) {
 	t.Setenv("LOG_LEVEL", "debug")
 	t.Setenv("WORKER_POLL_INTERVAL", "250ms")
 	t.Setenv("ECHONOTE_INTERNAL_TOKEN", "0123456789abcdef0123456789abcdef")
+	t.Setenv("SNAPANY_API_KEY", "test-snapany-key")
 
 	cfg, err := Load()
 	if err != nil {
@@ -23,8 +24,8 @@ func TestLoadAndValidateAPI(t *testing.T) {
 	if cfg.ListenAddress() != "127.0.0.1:9090" || cfg.LogLevel != slog.LevelDebug || cfg.WorkerPollInterval != 250*time.Millisecond {
 		t.Fatalf("unexpected config: %+v", cfg)
 	}
-	if cfg.ASRQualityModel != "fun-asr" {
-		t.Fatalf("unexpected ASR model: %q", cfg.ASRQualityModel)
+	if cfg.ASRQualityModel != "fun-asr" || cfg.SnapAnyAPIKey != "test-snapany-key" {
+		t.Fatalf("unexpected provider config: %+v", cfg)
 	}
 }
 
@@ -113,6 +114,7 @@ func baseEnvironment(t *testing.T) {
 		"APP_ENV", "SERVER_HOST", "SERVER_PORT", "LOG_LEVEL", "DATABASE_URL", "EXPECTED_DATABASE_NAME", "DATABASE_CONNECTION_BUDGET",
 		"ECHONOTE_INTERNAL_TOKEN", "WORKER_POLL_INTERVAL", "WORKER_LEASE_TIMEOUT", "WORKER_TEMP_MAX_AGE", "ASR_POLL_INTERVAL",
 		"ASR_PROVIDER", "ASR_API_KEY", "ASR_ENDPOINT", "ASR_QUALITY_MODEL",
+		"SNAPANY_API_KEY",
 		"STORAGE_PROVIDER", "STORAGE_REGION", "STORAGE_ENDPOINT", "STORAGE_BUCKET", "STORAGE_ACCESS_KEY", "STORAGE_SECRET_KEY",
 	} {
 		t.Setenv(key, "")

@@ -29,6 +29,7 @@ type Config struct {
 	ASRAPIKey          string
 	ASREndpoint        string
 	ASRQualityModel    string
+	SnapAnyAPIKey      string
 	StorageProvider    string
 	StorageRegion      string
 	StorageEndpoint    string
@@ -54,6 +55,7 @@ func Load() (Config, error) {
 		ASRAPIKey:          strings.TrimSpace(os.Getenv("ASR_API_KEY")),
 		ASREndpoint:        envOrDefault("ASR_ENDPOINT", "https://dashscope.aliyuncs.com"),
 		ASRQualityModel:    strings.ToLower(envOrDefault("ASR_QUALITY_MODEL", "fun-asr")),
+		SnapAnyAPIKey:      strings.TrimSpace(os.Getenv("SNAPANY_API_KEY")),
 		StorageProvider:    strings.ToLower(strings.TrimSpace(os.Getenv("STORAGE_PROVIDER"))),
 		StorageRegion:      strings.TrimSpace(os.Getenv("STORAGE_REGION")),
 		StorageEndpoint:    strings.TrimSpace(os.Getenv("STORAGE_ENDPOINT")),
@@ -66,6 +68,9 @@ func Load() (Config, error) {
 
 	if cfg.Environment != "development" && cfg.Environment != "test" && cfg.Environment != "staging" && cfg.Environment != "production" {
 		return Config{}, fmt.Errorf("APP_ENV must be development, test, staging, or production")
+	}
+	if placeholder(cfg.SnapAnyAPIKey) {
+		cfg.SnapAnyAPIKey = ""
 	}
 	if cfg.DatabaseURL == "" {
 		return Config{}, fmt.Errorf("DATABASE_URL is required")

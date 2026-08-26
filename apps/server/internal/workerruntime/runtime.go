@@ -37,7 +37,7 @@ func Run(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) error {
 	transcriptions := repository.NewTranscriptionRepository(pool, cfg.ASRQualityModel)
 	httpClient := podcastprovider.NewHTTPClient()
 	defer httpClient.CloseIdleConnections()
-	resolver := podcastprovider.NewResolver(httpClient)
+	resolver := podcastprovider.NewResolver(httpClient, cfg.SnapAnyAPIKey)
 	handlers := map[string]worker.Handler{
 		repository.ResolveEpisodeJobType: service.NewResolveImportHandler(imports, transcriptions, resolver),
 	}

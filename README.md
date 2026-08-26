@@ -1,6 +1,6 @@
 # EchoNote MCP 转录服务
 
-EchoNote 现在只有一个业务能力：接收播客页面、RSS 或直接音频 URL，异步转录，最终返回 Markdown。没有网页、笔记、搜索、AI 总结、对话或开发环境免登录入口。
+EchoNote 现在只有一个业务能力：接收播客页面、RSS、社交媒体帖子/列表页或直接音频 URL，异步转录，最终返回 Markdown。列表页会选择第一页中第一个含音频或视频的帖子。没有网页、笔记、搜索、AI 总结、对话或开发环境免登录入口。
 
 ```text
 MCP 客户端 ── HTTPS + OAuth 2.1 ── apps/mcp :3001
@@ -34,7 +34,7 @@ EchoNote 是 OAuth 资源服务器，不保存密码。仓库提供自托管 Key
 
 ```powershell
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
-# 编辑 .env，填写 Keycloak 密码、ECHONOTE_INTERNAL_TOKEN、阿里云 ASR 与 OSS 凭据
+# 编辑 .env，填写 Keycloak 密码、ECHONOTE_INTERNAL_TOKEN、SnapAny、阿里云 ASR 与 OSS 凭据
 docker compose up -d postgres keycloak
 pnpm install
 pnpm dev

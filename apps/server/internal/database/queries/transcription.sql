@@ -58,7 +58,15 @@ SELECT
           AND source.user_id = run.user_id
         ORDER BY source.created_at DESC, source.id DESC
         LIMIT 1
-    ), '')::text AS audio_url
+    ), '')::text AS audio_url,
+    COALESCE((
+        SELECT source.download_headers
+        FROM episode_sources AS source
+        WHERE source.episode_id = run.episode_id
+          AND source.user_id = run.user_id
+        ORDER BY source.created_at DESC, source.id DESC
+        LIMIT 1
+    ), '{}'::jsonb)::jsonb AS download_headers
 FROM transcription_runs AS run
 WHERE run.id = sqlc.arg(run_id);
 

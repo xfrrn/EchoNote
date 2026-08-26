@@ -216,7 +216,7 @@ func waitForRunCleanup(
 
 type fakeDownloader struct{}
 
-func (fakeDownloader) Download(_ context.Context, _ string, destination string) (string, error) {
+func (fakeDownloader) Download(_ context.Context, _ string, _ map[string]string, destination string) (string, error) {
 	data := []byte("source-audio")
 	return digest(data), os.WriteFile(destination, data, 0o600)
 }

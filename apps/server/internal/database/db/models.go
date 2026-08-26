@@ -30,16 +30,17 @@ type EpisodeIdentityKey struct {
 }
 
 type EpisodeSource struct {
-	ID           pgtype.UUID        `json:"id"`
-	UserID       pgtype.UUID        `json:"user_id"`
-	EpisodeID    pgtype.UUID        `json:"episode_id"`
-	SourceType   string             `json:"source_type"`
-	ExternalID   *string            `json:"external_id"`
-	SourceUrl    string             `json:"source_url"`
-	CanonicalUrl string             `json:"canonical_url"`
-	AudioUrl     string             `json:"audio_url"`
-	RssGuid      *string            `json:"rss_guid"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	ID              pgtype.UUID        `json:"id"`
+	UserID          pgtype.UUID        `json:"user_id"`
+	EpisodeID       pgtype.UUID        `json:"episode_id"`
+	SourceType      string             `json:"source_type"`
+	ExternalID      *string            `json:"external_id"`
+	SourceUrl       string             `json:"source_url"`
+	CanonicalUrl    string             `json:"canonical_url"`
+	AudioUrl        string             `json:"audio_url"`
+	RssGuid         *string            `json:"rss_guid"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	DownloadHeaders []byte             `json:"download_headers"`
 }
 
 type Import struct {

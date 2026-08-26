@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -86,6 +87,14 @@ func (r *ImportRepository) SaveResolved(
 	if len(identityKeys) == 0 {
 		return pgtype.UUID{}, errors.New("resolver returned no episode identity")
 	}
+	downloadHeaders := []byte("{}")
+	if len(resolved.AudioHeaders) > 0 {
+		var err error
+		downloadHeaders, err = json.Marshal(resolved.AudioHeaders)
+		if err != nil {
+			return pgtype.UUID{}, fmt.Errorf("encode audio download headers: %w", err)
+		}
+	}
 
 	return withTx(ctx, r.pool, func(queries *db.Queries) (pgtype.UUID, error) {
 		importRecord, err := queries.GetImportForResolve(ctx, db.GetImportForResolveParams{ImportID: importID, UserID: userID})
@@ -145,7 +154,8 @@ func (r *ImportRepository) SaveResolved(
 			UserID: userID, EpisodeID: episodeID, SourceType: resolved.SourceType,
 			ExternalID: nullableString(resolved.ExternalID), SourceUrl: strings.TrimSpace(rawURL),
 			CanonicalUrl: strings.TrimSpace(resolved.CanonicalURL), AudioUrl: strings.TrimSpace(resolved.AudioURL),
-			RssGuid: nullableString(resolved.RSSGUID),
+			DownloadHeaders: downloadHeaders,
+			RssGuid:         nullableString(resolved.RSSGUID),
 		}); err != nil {
 			return pgtype.UUID{}, fmt.Errorf("save episode source: %w", err)
 		}
@@ -160,8 +170,13 @@ func (r *ImportRepository) SaveResolved(
 
 func episodeIdentityKeys(resolved *domain.ResolvedEpisode) []string {
 	keys := make([]string, 0, 4)
-	if externalID := strings.TrimSpace(resolved.ExternalID); externalID != "" && resolved.SourceType == domain.SourceApple {
+	if externalID := strings.TrimSpace(resolved.ExternalID); externalID != "" && (resolved.SourceType == domain.SourceApple || resolved.SourceType == domain.SourceSnapAny) {
 		keys = append(keys, identityKey("platform", resolved.SourceType+":"+externalID))
+	}
+	if resolved.SourceType == domain.SourceSnapAny {
+		if canonicalURL := normalizeURL(resolved.CanonicalURL); canonicalURL != "" {
+			keys = append(keys, identityKey("canonical", canonicalURL))
+		}
 	}
 	if guid := strings.TrimSpace(resolved.RSSGUID); guid != "" {
 		keys = append(keys, identityKey("rss", guid))

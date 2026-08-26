@@ -10,6 +10,7 @@ const (
 	SourceApple       = "apple_podcasts"
 	SourceRSS         = "rss"
 	SourceDirectAudio = "direct_audio"
+	SourceSnapAny     = "snapany"
 )
 
 var ErrNotApplicable = errors.New("resolver not applicable")
@@ -29,6 +30,7 @@ type ResolvedEpisode struct {
 	CanonicalURL       string
 	FeedURL            string
 	AudioURL           string
+	AudioHeaders       map[string]string
 }
 
 type EpisodeResolver interface {

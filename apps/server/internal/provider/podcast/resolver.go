@@ -12,12 +12,16 @@ type Resolver struct {
 	resolvers []domain.EpisodeResolver
 }
 
-func NewResolver(client *http.Client) *Resolver {
-	return &Resolver{resolvers: []domain.EpisodeResolver{
+func NewResolver(client *http.Client, snapAnyAPIKey string) *Resolver {
+	resolvers := []domain.EpisodeResolver{
 		newAppleResolver(client),
 		newDirectAudioResolver(client),
-		newRSSResolver(client),
-	}}
+	}
+	if snapAnyAPIKey != "" {
+		resolvers = append(resolvers, newSnapAnyResolver(client, snapAnyAPIKey))
+	}
+	resolvers = append(resolvers, newRSSResolver(client))
+	return &Resolver{resolvers: resolvers}
 }
 
 func (r *Resolver) CanResolve(rawURL string) bool {
@@ -40,5 +44,5 @@ func (r *Resolver) Resolve(ctx context.Context, rawURL string) (*domain.Resolved
 		}
 		return resolved, err
 	}
-	return nil, domain.NewResolveError("IMPORT_UNSUPPORTED_URL", "URL is not a supported Apple Podcasts, RSS, or direct audio source", false, nil)
+	return nil, domain.NewResolveError("IMPORT_UNSUPPORTED_URL", "URL is not a supported Apple Podcasts, RSS, direct audio, or social media source", false, nil)
 }

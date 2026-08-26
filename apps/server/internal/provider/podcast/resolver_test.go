@@ -2,6 +2,7 @@ package podcast
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -60,7 +61,7 @@ func TestResolverChoosesDirectAudioOrNewestRSSItem(t *testing.T) {
 			return nil, nil
 		}
 	})}
-	resolver := NewResolver(client)
+	resolver := NewResolver(client, "")
 
 	direct, err := resolver.Resolve(context.Background(), "https://media.example.com/episode.mp3")
 	if err != nil || direct.SourceType != domain.SourceDirectAudio || direct.EpisodeTitle != "Direct Episode" {
@@ -72,6 +73,78 @@ func TestResolverChoosesDirectAudioOrNewestRSSItem(t *testing.T) {
 	}
 	if rss.SourceType != domain.SourceRSS || rss.EpisodeTitle != "New" || rss.RSSGUID != "new-guid" || rss.DurationMS != 62000 {
 		t.Fatalf("unexpected RSS episode: %+v", rss)
+	}
+}
+
+func TestSnapAnyResolvesPostAndListPage(t *testing.T) {
+	tests := map[string]struct {
+		responses []struct {
+			path   string
+			status int
+			body   string
+		}
+		wantTitle string
+		wantAudio string
+	}{
+		"post": {
+			responses: []struct {
+				path   string
+				status int
+				body   string
+			}{{"/extract/post", http.StatusOK, `{
+				"site":"youtube","id":"post-1","title":"Episode","text":"Description",
+				"post_url":"https://social.example.com/post-1","created_at":"2026-08-20T01:02:03Z",
+				"medias":[{"media_type":"video","resource_url":"https://cdn.example.com/video.mp4","preview_url":"https://cdn.example.com/cover.jpg","duration":12.5,
+				"headers":{"Referer":"https://social.example.com/","User-Agent":""},"variants":[{"audio_url":"https://cdn.example.com/audio.m4a"}]}]
+			}`}},
+			wantTitle: "Episode", wantAudio: "https://cdn.example.com/audio.m4a",
+		},
+		"list page": {
+			responses: []struct {
+				path   string
+				status int
+				body   string
+			}{
+				{"/extract/post", http.StatusBadRequest, `{"code":"playlist_not_supported","message":"use playlist"}`},
+				{"/extract/playlist", http.StatusOK, `{"has_more":true,"next_cursor":"next","profile":{"display_name":"Creator"},"posts":[
+					{"id":"image","medias":[{"media_type":"image","resource_url":"https://cdn.example.com/image.jpg"}]},
+					{"id":"video","text":"Newest playable post","post_url":"https://social.example.com/video","medias":[{"media_type":"video","resource_url":"https://cdn.example.com/video.mp4"}]}
+				]}`},
+			},
+			wantTitle: "Newest playable post", wantAudio: "https://cdn.example.com/video.mp4",
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			requestIndex := 0
+			client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+				if requestIndex >= len(test.responses) {
+					t.Fatalf("unexpected request: %s", request.URL)
+				}
+				want := test.responses[requestIndex]
+				requestIndex++
+				if request.Method != http.MethodPost || request.URL.Path != want.path || request.Header.Get("Authorization") != "Bearer test-key" || request.Header.Get("Accept-Language") != "zh" {
+					t.Fatalf("unexpected request: %s %s headers=%v", request.Method, request.URL, request.Header)
+				}
+				var payload map[string]string
+				if err := json.NewDecoder(request.Body).Decode(&payload); err != nil || payload["url"] != "https://social.example.com/source" {
+					t.Fatalf("payload=%v err=%v", payload, err)
+				}
+				return response(request, want.status, "application/json", want.body), nil
+			})}
+			resolver := newSnapAnyResolver(client, "test-key")
+			resolver.baseURL = "https://api.example.com"
+			resolved, err := resolver.Resolve(context.Background(), "https://social.example.com/source")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if requestIndex != len(test.responses) || resolved.SourceType != domain.SourceSnapAny || resolved.EpisodeTitle != test.wantTitle || resolved.AudioURL != test.wantAudio {
+				t.Fatalf("requests=%d resolved=%+v", requestIndex, resolved)
+			}
+			if name == "post" && (resolved.ExternalID != "youtube:post-1" || resolved.DurationMS != 12500 || resolved.AudioHeaders["Referer"] == "" || resolved.AudioHeaders["User-Agent"] != "") {
+				t.Fatalf("unexpected post metadata: %+v", resolved)
+			}
+		})
 	}
 }
 

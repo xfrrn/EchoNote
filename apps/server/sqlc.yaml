@@ -12,6 +12,7 @@ sql:
       - migrations/000008_retention.up.sql
       - migrations/000009_mcp_identity.up.sql
       - migrations/000010_transcription_service.up.sql
+      - migrations/000011_snapany.up.sql
     queries: internal/database/queries
     gen:
       go:

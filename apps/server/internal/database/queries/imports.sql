@@ -125,6 +125,7 @@ INSERT INTO episode_sources (
     source_url,
     canonical_url,
     audio_url,
+    download_headers,
     rss_guid
 ) VALUES (
     sqlc.arg(user_id),
@@ -134,9 +135,16 @@ INSERT INTO episode_sources (
     sqlc.arg(source_url),
     sqlc.arg(canonical_url),
     sqlc.arg(audio_url),
+    sqlc.arg(download_headers)::jsonb,
     sqlc.narg(rss_guid)::text
 )
-ON CONFLICT (user_id, episode_id, source_type, source_url) DO NOTHING;
+ON CONFLICT (user_id, episode_id, source_type, source_url) DO UPDATE
+SET external_id = EXCLUDED.external_id,
+    canonical_url = EXCLUDED.canonical_url,
+    audio_url = EXCLUDED.audio_url,
+    download_headers = EXCLUDED.download_headers,
+    rss_guid = EXCLUDED.rss_guid,
+    created_at = now();
 
 -- name: SetImportEpisode :exec
 UPDATE imports

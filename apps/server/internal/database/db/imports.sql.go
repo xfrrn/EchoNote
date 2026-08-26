@@ -46,6 +46,7 @@ INSERT INTO episode_sources (
     source_url,
     canonical_url,
     audio_url,
+    download_headers,
     rss_guid
 ) VALUES (
     $1,
@@ -55,20 +56,28 @@ INSERT INTO episode_sources (
     $5,
     $6,
     $7,
-    $8::text
+    $8::jsonb,
+    $9::text
 )
-ON CONFLICT (user_id, episode_id, source_type, source_url) DO NOTHING
+ON CONFLICT (user_id, episode_id, source_type, source_url) DO UPDATE
+SET external_id = EXCLUDED.external_id,
+    canonical_url = EXCLUDED.canonical_url,
+    audio_url = EXCLUDED.audio_url,
+    download_headers = EXCLUDED.download_headers,
+    rss_guid = EXCLUDED.rss_guid,
+    created_at = now()
 `
 
 type AddEpisodeSourceParams struct {
-	UserID       pgtype.UUID `json:"user_id"`
-	EpisodeID    pgtype.UUID `json:"episode_id"`
-	SourceType   string      `json:"source_type"`
-	ExternalID   *string     `json:"external_id"`
-	SourceUrl    string      `json:"source_url"`
-	CanonicalUrl string      `json:"canonical_url"`
-	AudioUrl     string      `json:"audio_url"`
-	RssGuid      *string     `json:"rss_guid"`
+	UserID          pgtype.UUID `json:"user_id"`
+	EpisodeID       pgtype.UUID `json:"episode_id"`
+	SourceType      string      `json:"source_type"`
+	ExternalID      *string     `json:"external_id"`
+	SourceUrl       string      `json:"source_url"`
+	CanonicalUrl    string      `json:"canonical_url"`
+	AudioUrl        string      `json:"audio_url"`
+	DownloadHeaders []byte      `json:"download_headers"`
+	RssGuid         *string     `json:"rss_guid"`
 }
 
 func (q *Queries) AddEpisodeSource(ctx context.Context, arg AddEpisodeSourceParams) error {
@@ -80,6 +89,7 @@ func (q *Queries) AddEpisodeSource(ctx context.Context, arg AddEpisodeSourcePara
 		arg.SourceUrl,
 		arg.CanonicalUrl,
 		arg.AudioUrl,
+		arg.DownloadHeaders,
 		arg.RssGuid,
 	)
 	return err
