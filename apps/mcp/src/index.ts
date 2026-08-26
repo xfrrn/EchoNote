@@ -27,20 +27,59 @@ type TranscriptionTask = {
 }
 
 const httpUrl = z.url().refine(value => ['http:', 'https:'].includes(new URL(value).protocol), 'Must be an HTTP or HTTPS URL')
-const taskId = z.uuid().describe('Task ID returned by transcribe_url')
+const taskId = z.uuid().describe('Task ID returned by a transcription tool')
+const docs = `# EchoNote MCP
+
+EchoNote turns public audio and video URLs into Markdown transcripts.
+
+## Tools
+
+- \`get_docs\`: Return this guide.
+- \`transcribe_url(url)\`: Queue one podcast page, RSS feed, social-media post, or direct audio URL.
+- \`transcribe_profile_url(url)\`: Queue the first playable audio or video from the first page of a social-media profile or list URL.
+- \`get_transcription(task_id)\`: Check a queued task. Poll until it returns the completed Markdown transcript or an error.
+
+## Workflow
+
+1. Choose \`transcribe_profile_url\` for a creator/profile/list page; otherwise choose \`transcribe_url\`.
+2. Save the returned \`task_id\`.
+3. Call \`get_transcription\` with that ID until the task completes.
+
+Each authenticated user can access only their own tasks.`
 
 function createServer(api: EchoNoteClient): McpServer {
   const server = new McpServer(
-    { name: 'echonote', version: '0.2.0' },
-    { instructions: 'Submit a URL with transcribe_url, then poll get_transcription until it returns Markdown.' },
+    { name: 'echonote', version: '0.3.0' },
+    { instructions: 'Use get_docs for guidance. Submit creator/profile/list pages with transcribe_profile_url and other supported URLs with transcribe_url, then poll get_transcription until it returns Markdown.' },
   )
 
+  server.registerTool(
+    'get_docs',
+    {
+      title: 'Get EchoNote documentation',
+      description: 'Get the usage guide for all EchoNote tools and workflows.',
+      inputSchema: {},
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    },
+    async (): Promise<CallToolResult> => ({ content: [{ type: 'text', text: docs }] }),
+  )
   server.registerTool(
     'transcribe_url',
     {
       title: 'Transcribe URL',
-      description: 'Queue transcription of a podcast page, feed, or direct audio URL.',
-      inputSchema: { url: httpUrl.describe('Podcast, feed, page, or direct audio URL') },
+      description: 'Queue transcription of one podcast page, RSS feed, social-media post, or direct audio URL.',
+      inputSchema: { url: httpUrl.describe('Podcast page, RSS feed, social-media post, or direct audio URL') },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    },
+    async ({ url }): Promise<CallToolResult> =>
+      toolResult(() => api.json<TranscriptionTask>('/api/v1/transcriptions', { method: 'POST', body: { url } })),
+  )
+  server.registerTool(
+    'transcribe_profile_url',
+    {
+      title: 'Transcribe profile URL',
+      description: 'Queue the first playable audio or video from the first page of a social-media profile or list URL.',
+      inputSchema: { url: httpUrl.describe('Social-media creator, profile, or list URL') },
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     async ({ url }): Promise<CallToolResult> =>

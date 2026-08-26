@@ -11,9 +11,11 @@ MCP 客户端 ── HTTPS + OAuth 2.1 ── apps/mcp :3001
                           PostgreSQL + Worker + ASR/OSS
 ```
 
-MCP 只暴露两个工具：
+MCP 暴露四个工具：
 
-- `transcribe_url(url)`：创建异步任务并返回 `task_id`。
+- `get_docs()`：返回完整使用指南。
+- `transcribe_url(url)`：为播客页面、RSS、单条社交媒体帖子或直接音频 URL 创建异步任务并返回 `task_id`。
+- `transcribe_profile_url(url)`：为社交媒体用户主页或列表页第一页中首个含音频或视频的帖子创建异步任务并返回 `task_id`。
 - `get_transcription(task_id)`：查询进度；完成后直接返回 Markdown。
 
 ## 认证与多用户
